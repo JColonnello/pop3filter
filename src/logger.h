@@ -9,7 +9,13 @@
 *  Alternativa: usar syslog para un log mas completo. Ver sección 13.4 del libro de  Stevens
 */
 
-typedef enum {DEBUG=0, INFO, ERROR, FATAL} LOG_LEVEL;
+typedef enum
+{
+	DEBUG = 0,
+	INFO,
+	ERROR,
+	FATAL
+} LOG_LEVEL;
 
 extern LOG_LEVEL current_level;
 
@@ -18,13 +24,19 @@ extern LOG_LEVEL current_level;
 **/
 void setLogLevel(LOG_LEVEL newLevel);
 
-char * levelDescription(LOG_LEVEL level);
+char *levelDescription(LOG_LEVEL level);
 
-// Debe ser una macro para poder obtener nombre y linea de archivo. 
-#define log(level, fmt, ...) do {if(level >= current_level) {\
-	fprintf (stderr, "%s: %s:%d, ", levelDescription(level), __FILE__, __LINE__); \
-	fprintf(stderr, fmt, ##__VA_ARGS__); \
-	fprintf(stderr,"\n"); }\
-	if ( level==FATAL) exit(1);} \
-	while(0)
+// Debe ser una macro para poder obtener nombre y linea de archivo.
+#define log(level, fmt, ...)                                                             \
+	do                                                                                   \
+	{                                                                                    \
+		if (level >= current_level)                                                      \
+		{                                                                                \
+			fprintf(stderr, "%s: %s:%d, ", levelDescription(level), __FILE__, __LINE__); \
+			fprintf(stderr, fmt, ##__VA_ARGS__);                                         \
+			fprintf(stderr, "\n");                                                       \
+		}                                                                                \
+		if (level == FATAL)                                                              \
+			exit(1);                                                                     \
+	} while (0)
 #endif
