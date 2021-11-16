@@ -90,9 +90,6 @@ void error_file(const char * file){
 void create_filter(const char * cmd){
     //TODO: Mandar respuesta del server origin
     strcat(cmd, "RESPONSE");
-    if(cmd == NULL){
-        //TODO: manejar errores
-    }
     system(cmd);
 }
 
