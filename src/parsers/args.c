@@ -7,6 +7,7 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
 
 #include "args.h"
 
@@ -87,12 +88,15 @@ void error_file(const char * file){
 
 
 void create_filter(const char * cmd){
-    //TODO: appendear el msg del origin server al cmd y correr system(cmd + msg);
-    //TODO: manejar errores
-
+    //TODO: Mandar respuesta del server origin
+    strcat(cmd, "RESPONSE");
+    if(cmd == NULL){
+        //TODO: manejar errores
+    }
+    system(cmd);
 }
-void 
-parse_args(const int argc, char **argv, struct socks5args *args) {
+
+void parse_args(const int argc, char **argv, struct socks5args *args) {
     memset(args, 0, sizeof(*args)); // sobre todo para setear en null los punteros de users
 
     args->socks_addr = "0.0.0.0";
