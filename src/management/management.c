@@ -8,7 +8,7 @@ void processCmd(const char * buffer, size_t len, int socket, struct sockaddr * c
     static char statsBuffer[256];
     char * errorFile;
     char * proxy_addr;
-    RequestStatus status = lexRequest(buffer, len);
+    RequestStatus status = lexRequest(buffer, len); //TODO: se podria dejar en el buffer la data
 
     switch(status){
         case STATS:
@@ -16,20 +16,20 @@ void processCmd(const char * buffer, size_t len, int socket, struct sockaddr * c
             sendto(socket, statsBuffer, statsLen, 0, clientAddr, clientAddrLen);
             break;
         case SET_ERROR_FILE:
-            set_error_file(args, data); //TODO: Obtener parametros
+            set_error_file(args, data); //TODO: Obtener data
             break;
         case GET_ERROR_FILE:
             error_file = get_error_file(args);
             break;
         case SET_PROXY_ADDR:
-            //TODO: Obtener parametros
+            //TODO: Obtener data
             inet_pton(AF_INET, data, &(args.listenSock.sin_addr));
             break;
         case GET_PROXY_ADDR:
             proxy_addr = inet_ntoa(args.listenSock.sin_addr);
             break;
         case SET_LISTEN_PORT:
-            //TODO: Obtener parametros
+            //TODO: Obtener data
             args.listenSock.sin_port = htons(atoi(data));
             break;
         case GET_LISTEN_PORT:
@@ -62,3 +62,12 @@ void processCmd(const char * buffer, size_t len, int socket, struct sockaddr * c
             break;
     }
 }
+
+
+
+void receiveRequest(char * buffer, size_t len, int socket, struct sockaddr * clientAddr, socklen_t clientAddrLen, ServerArguments args){
+    //TODO: Crear socket y recibir las request de los usuarios
+    processCmd(buffer, len, socket, clientAddr, clientAddrLen, args, data);
+
+}
+
