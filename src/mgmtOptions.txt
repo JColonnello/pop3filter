@@ -25,11 +25,11 @@ Se permiten las siguientes solicitudes al servidor:
 -   GET_ERROR_FILE:
     Indica la ruta donde se redirecciona stderr.
 
--   SET_PROXY_ADRR:
+-   SET_PROXY_ADDR:
     Setea la direccion donde servirá el proxy.
     Se envia una direccion como DATA en la solicitud.
 
--   GET_PROXY_ADRR:
+-   GET_PROXY_ADDR:
     Indica la direccion donde sirve el proxy.
 
 -   SET_LISTEN_PORT:
@@ -50,11 +50,11 @@ Se permiten las siguientes solicitudes al servidor:
     Establece el filtro utilizado para las trnasformaciones externas.
     Se envia un comando como DATA en la solicitud.
 
--   SET_MGMT_ADRR:
+-   SET_MGMT_ADDR:
     Establece la direccion donde servirá el servicio de management.
     Se envia una direccion como DATA en la solicitud.
 
--   GET_MGMT_ADRR:
+-   GET_MGMT_ADDR:
     Indica la direccion donde sirve el servicio de management.
 
 -   SET_MGMT_PORT:

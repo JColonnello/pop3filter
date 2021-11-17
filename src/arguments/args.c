@@ -98,7 +98,7 @@ void main(int argc, char **argv) {
                 args.listenSock.sin_port = htons(atoi(optarg));
                 break;
             case 'P':
-            args.originPort = optarg;
+                args.originPort = optarg;
                 break;
             case 'o':
                 args.mgmtSock.sin_port = htons(atoi(optarg));
