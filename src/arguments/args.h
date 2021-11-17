@@ -14,5 +14,12 @@ typedef struct
 	char *originServer;
 } ServerArguments;
 
+
+/**
+ * Interpreta la linea de comandos (argc, argv) llenando
+ * args con defaults o la seleccion humana. Puede cortar
+ * la ejecución.
+ */
+
 #endif
 
