@@ -1,0 +1,81 @@
+Protocolo POP3filter v1
+
+El protocolo se basa en la necesidad de establecer (y obtener) distintos parametros
+de un proxy para el protocolo POP3 sin la necesidad de reiniciar el servidor. Ademas,
+se provee un conjunto de metricas que permiten conocer el uso del proxy por los usuarios.
+
+Solicitudes:
+Una vez establecida la conexion, las solicitudes tendran como estructura:
+
+                    REQUEST  -  DATA  -  SIZEOF_DATA    
+
+Se permiten las siguientes solicitudes al servidor:
+
+-   STATS:
+    Se obtienen las distintas metricas que el servidor almacena mientras se encuentra en 
+    ejecucion (datos volatiles):
+        -Cantidad de conexiones historicas
+        -Cantidad de conexiones concurrentes
+        -Cantidad de bytes transferidos
+
+-   SET_ERROR_FILE:
+    Setea el archivo donde se redirecciona stderr.
+    Se envia un path como DATA en la solicitud.
+
+-   GET_ERROR_FILE:
+    Indica la ruta donde se redirecciona stderr.
+
+-   SET_PROXY_ADRR:
+    Setea la direccion donde servirá el proxy.
+    Se envia una direccion como DATA en la solicitud.
+
+-   GET_PROXY_ADRR:
+    Indica la direccion donde sirve el proxy.
+
+-   SET_LISTEN_PORT:
+    Establece el puerto TCP donde se escucha por conexiones entrantes POP3.
+    Se envia un numero de puerto como DATA en la solicitud.
+
+-   GET_LISTEN_PORT:
+    Indica el puerto TCP donde se escucha por conexiones entrantes POP3.
+
+-   SET_ORIGIN_PORT:
+    Establece el puerto TCP donde se encuentra el servidor POP3 en el servidor origen.
+    Se envia un numero de puerto como DATA en la solicitud.
+    
+-   GET_ORIGIN_PORT:
+    Indica el puerto TCP donde se encuentra el servidor POP3 en el servidor origen.
+
+-   SET_FILTER:
+    Establece el filtro utilizado para las trnasformaciones externas.
+    Se envia un comando como DATA en la solicitud.
+
+-   SET_MGMT_ADRR:
+    Establece la direccion donde servirá el servicio de management.
+    Se envia una direccion como DATA en la solicitud.
+
+-   GET_MGMT_ADRR:
+    Indica la direccion donde sirve el servicio de management.
+
+-   SET_MGMT_PORT:
+    Establece el puerto donde se encuentra el servidor de management.
+    Se envia un numero de puerto como DATA en la solicitud.
+
+-   GET_MGMT_PORT:
+    Indica el puerto donde se encuentra el servidor de management.
+
+
+Respuesta:
+El servidor procesa la solicitud y envia la respuesta del tipo:
+
+                    STATUS  -  DATA  - SIZEOF_DATA
+
+Donde STATUS puede tomar uno de los siguientes valores:
+
+-   OK
+-   ERROR 
+-   BAD_REQUEST
+
+
+
+
