@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #define _GNU_SOURCE
 
 #include <errno.h>
@@ -14,19 +15,29 @@
 #include "logger.h"
 #include "net-utils/tcpUtils.h"
 
+#define hasFlag(x, f) (bool)((x) & (f))
+
 static int tcpSocket;
 static int epollfd;
 static bool sigioPending = false;
 
-static Queue *eventQueue;
 static Pool *evDataPool;
 static Pool *clients;
 
+typedef enum
+{
+	CS_CLIENT_SERVER = 1,
+	CS_SERVER_CLIENT = 2,
+	CS_SERVER_FILTER = 4,
+	CS_FILTER_CLIENT = 8,
+} CommSegment;
+
 typedef struct
 {
+	int id;
 	Handle clientEvent;
 	Handle serverEvent;
-	bool active;
+	CommSegment activeSegments;
 } ClientData;
 
 typedef enum
@@ -44,7 +55,7 @@ typedef struct
 	bool readReady, writeReady;
 } EventData;
 
-static Handle eventMod(EventData eventData, uint32_t epollFlags)
+static Handle eventAdd(EventData eventData, uint32_t epollFlags)
 {
 	Handle eventId = Pool_Add(evDataPool, &eventData);
 	if (eventId < 0)
@@ -60,85 +71,138 @@ static Handle eventMod(EventData eventData, uint32_t epollFlags)
 	return eventId;
 }
 
-static bool processEvent(struct epoll_event event)
+static bool acceptClient()
+{
+	int clientSocket = acceptTCPConnection(tcpSocket);
+	// No pending connection
+	if (clientSocket < 0)
+		return true;
+
+	ClientData clientData = {};
+	Handle clientId = Pool_Add(clients, &clientData);
+	if (clientId < 0)
+		log(FATAL, "Out of memory");
+
+	// Add to epoll
+	Handle clientEvent = eventAdd(
+	    (EventData){
+	        .clientId = clientId,
+	        .fd = clientSocket,
+	        .type = ST_CLIENT,
+	    },
+	    EPOLLIN | EPOLLOUT);
+	// Set backward reference
+	ClientData *ref = Pool_GetRef(clients, clientId);
+	ref->clientEvent = clientEvent;
+	ref->id = clientId;
+	ref->activeSegments = CS_CLIENT_SERVER;
+
+	return false;
+}
+
+static void closeClient(ClientData *client, CommSegment level)
+{
+	switch (level)
+	{
+	case CS_CLIENT_SERVER: {
+		EventData *clientEvent = Pool_GetRef(evDataPool, client->clientEvent);
+		clientEvent->readReady = false;
+		client->activeSegments &= ~CS_CLIENT_SERVER;
+		break;
+	}
+	case CS_SERVER_CLIENT: {
+		EventData *serverEvent = Pool_GetRef(evDataPool, client->serverEvent);
+		serverEvent->readReady = false;
+		client->activeSegments &= ~CS_SERVER_CLIENT;
+		break;
+	}
+	default:
+		break;
+	}
+
+	// Client-server is closed both ways
+	if ((CS_CLIENT_SERVER | CS_SERVER_CLIENT) & level && !hasFlag(client->activeSegments, CS_SERVER_CLIENT) &&
+	    !hasFlag(client->activeSegments, CS_CLIENT_SERVER))
+	{
+		// Don't release EventData, handler could still be referenced
+		EventData *clientEvent = Pool_GetRef(evDataPool, client->clientEvent);
+		int fd = clientEvent->fd;
+		close(fd);
+		// epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL);
+	}
+
+	// Free client structures
+	if (!client->activeSegments)
+	{
+		Pool_Remove(evDataPool, client->clientEvent);
+		Pool_Remove(evDataPool, client->serverEvent);
+		Pool_Remove(clients, client->id);
+	}
+}
+
+static void processClient(ClientData *client)
+{
+	EventData *clientEvent = Pool_GetRef(evDataPool, client->clientEvent);
+	// EventData *serverEvent = Pool_GetRef(evDataPool, client->serverEvent);
+
+	/// TODO: Process client -> server stream;
+	// if (client->activeSegments & CS_CLIENT_SERVER && clientEvent->readReady && serverEvent != NULL &&
+	// serverEvent->writeReady)
+	if (client->activeSegments & CS_CLIENT_SERVER && clientEvent->readReady)
+	{
+		bool exhausted;
+		// Skip
+		static char buffer[CLIENT_WRITE_BUF];
+		ssize_t skip = read(clientEvent->fd, buffer, sizeof(buffer));
+		if (skip <= 0)
+		{
+			// Close client
+			closeClient(client, CS_CLIENT_SERVER);
+			return;
+		}
+		exhausted = (skip < CLIENT_WRITE_BUF);
+		clientEvent->readReady = !exhausted;
+	}
+	// if (client->activeSegments & CS_SERVER_CLIENT && clientEvent->writeReady && serverEvent != NULL &&
+	// serverEvent->readReady)
+	if (client->activeSegments & CS_SERVER_CLIENT && clientEvent->writeReady)
+	{
+		// closeClient(client, CS_SERVER_CLIENT);
+	}
+}
+
+static void processEvent(struct epoll_event event)
 {
 	EventData *eventData = Pool_GetRef(evDataPool, event.data.u32);
 	if (eventData->fd == tcpSocket && event.events & EPOLLIN)
 	{
-		int clientSocket = acceptTCPConnection(tcpSocket);
-		// No pending connection
-		if (clientSocket < 0)
-		{
-			eventData->readReady = false;
-			return true;
-		}
-
-		ClientData clientData = {
-		    .serverEvent = -1,
-		    .active = true,
-		};
-		Handle clientId = Pool_Add(clients, &clientData);
-		if (clientId < 0)
-			log(FATAL, "Out of memory");
-
-		// Add to epoll
-		Handle clientEvent = eventMod(
-		    (EventData){
-		        .clientId = clientId,
-		        .fd = clientSocket,
-		        .type = ST_CLIENT,
-		    },
-		    EPOLLIN | EPOLLOUT);
-		// Set backward reference
-		ClientData *ref = Pool_GetRef(clients, clientId);
-		ref->clientEvent = clientEvent;
-
+		bool newClient = acceptClient();
 		// Could have more clients waiting, reschedule
-		eventData->readReady = true;
-		return false;
+		eventData->readReady = newClient;
 	}
 	else if (eventData->type)
 	{
 		if (event.events & EPOLLOUT)
 			eventData->writeReady = true;
 		if (event.events & EPOLLIN)
-		{
-			ClientData *client = Pool_GetRef(clients, eventData->clientId);
-			EventData *serverEvent = Pool_GetRef(evDataPool, client->serverEvent);
-			// If server is not ready for write, reschedule
-			if (serverEvent != NULL && !serverEvent->writeReady)
-				return false;
-
-			bool exhausted;
-			/// TODO: Process client stream;
-			// Skip
-			static char buffer[CLIENT_WRITE_BUF];
-			ssize_t skip = read(eventData->fd, buffer, sizeof(buffer));
-			if (skip <= 0)
-			{
-				// Close client
-				close(eventData->fd);
-				Pool_Remove(evDataPool, event.data.u32);
-				client->clientEvent = -1;
-				client->active = false;
-				return true;
-			}
-			exhausted = (skip < CLIENT_WRITE_BUF);
-			eventData->readReady = !exhausted;
-			return exhausted;
-			// perror("OOf");
-			// log(ERROR, "%d", errno);
-		}
-		return true;
+			eventData->readReady = true;
 	}
-
-	log(ERROR, "Unhandled event");
-	return true;
+	else
+		log(ERROR, "Unhandled event");
 }
 
-static void sigioHandler(int signal)
+static void sigioHandler()
 {
 	sigioPending = true;
+}
+
+static void closeServer()
+{
+	close(epollfd);
+	close(tcpSocket);
+	Pool_Dispose(evDataPool);
+	Pool_Dispose(clients);
+	exit(0);
 }
 
 void startServer(const char *port)
@@ -160,10 +224,13 @@ void startServer(const char *port)
 	if (fcntl(tcpSocket, F_SETOWN, getpid()) < 0)
 		fprintf(stderr, "Unable to set process owner to us");
 
+	handler.sa_handler = closeServer;
+	sigaction(SIGINT, &handler, NULL);
+
 	// Enable SIGIO
 	sigset_t mask, oldmask;
 	sigemptyset(&mask);
-	sigaddset(&mask, SI_SIGIO);
+	sigaddset(&mask, SIGIO);
 	sigprocmask(SIG_UNBLOCK, &mask, &oldmask);
 
 	// Create epoll fd
@@ -173,11 +240,10 @@ void startServer(const char *port)
 
 	// Create collections
 	evDataPool = Pool_Create(sizeof(EventData));
-	eventQueue = Queue_Create(0, sizeof(struct epoll_event));
 	clients = Pool_Create(sizeof(ClientData));
 
 	// Add passive socket to epoll
-	eventMod(
+	eventAdd(
 	    (EventData){
 	        .fd = tcpSocket,
 	        .type = ST_PASSIVE,
@@ -217,18 +283,13 @@ void processingLoop()
 		// Re-enable SIGIO
 		sigprocmask(SIG_UNBLOCK, &sigioMask, NULL);
 
-		// Add events to queue
 		for (int i = 0; i < nfds; i++)
-			Queue_Enqueue(eventQueue, &events[i]);
+			processEvent(events[i]);
 
-		// Process events
-		for (int i = Queue_Count(eventQueue); i > 0; i--)
-		{
-			struct epoll_event event;
-			Queue_Dequeue(eventQueue, &event);
-			bool handled = processEvent(event);
-			if (!handled)
-				Queue_Enqueue(eventQueue, &event);
-		}
+		int clientCount = Pool_Count(clients);
+		Handle activeClients[clientCount];
+		Pool_ToIndexArray(clients, activeClients);
+		for (int i = 0; i < clientCount; i++)
+			processClient(Pool_GetRef(clients, activeClients[i]));
 	}
 }
