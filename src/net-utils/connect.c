@@ -49,11 +49,11 @@ int startTCPConnection(const char *hostname, const char *port){
         goto connection_failed;
     }
 
-    return CONNECTION_COMPLETED;
+    return ret;
     connection_failed:
         close(connSock);
         connSock = -1;
-        return CONNECTION_FAILED;
+        return -1;
     
 }
 
@@ -66,7 +66,7 @@ resolve_address(char *address, uint16_t port, struct addrinfo ** addrinfo) {
           .ai_family    = AF_UNSPEC,    /* Allow IPv4 or IPv6 */
           .ai_socktype  = SOCK_STREAM,
           .ai_flags     = AI_PASSIVE,   /* For wildcard IP address */
-          .ai_protocol  = 0,            /* Any protocol */
+          .ai_protocol  = IPPROTO_TCP,           1
           .ai_canonname = NULL,
           .ai_addr      = NULL,
           .ai_next      = NULL,
