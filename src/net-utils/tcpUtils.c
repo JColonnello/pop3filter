@@ -14,7 +14,7 @@
 #define MAXPENDING 64 // Maximum outstanding connection requests
 #define MAX_ADDR_BUFFER 128
 
-int setupTCPServerSocket(const char *service)
+int setupTCPServerSocket(const char *service, int *fd)
 {
 
 	// Construct the server address structure
@@ -33,16 +33,15 @@ int setupTCPServerSocket(const char *service)
 		return -1;
 	}
 
-	int opt = 1;
-	int servSock = -1;
+	int fdCount = 0;
 	// Intentamos ponernos a escuchar en alguno de los puertos asociados al servicio, sin especificar una IP en
 	// particular Iteramos y hacemos el bind por alguna de ellas, la primera que funcione, ya sea la general para IPv4
 	// (0.0.0.0) o IPv6 (::/0) . Con esta implementación estaremos escuchando o bien en IPv4 o en IPv6, pero no en ambas
-	for (struct addrinfo *addr = servAddr; addr != NULL && servSock == -1; addr = addr->ai_next)
+	for (struct addrinfo *addr = servAddr; addr != NULL; addr = addr->ai_next)
 	{
 		errno = 0;
 		// Create a TCP socket
-		servSock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+		int servSock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
 		if (servSock < 0)
 		{
 			// no se pudo crear el socket
@@ -50,7 +49,16 @@ int setupTCPServerSocket(const char *service)
 			continue; // Socket creation failed; try next address
 		}
 
+		int opt = 1;
 		if (setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
+		{
+			perror("setsockopt");
+			goto error;
+		}
+
+		opt = 1;
+		if (addr->ai_family == AF_INET6 &&
+		    setsockopt(servSock, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&opt, sizeof(opt)) < 0)
 		{
 			perror("setsockopt");
 			goto error;
@@ -58,9 +66,14 @@ int setupTCPServerSocket(const char *service)
 
 		// Set nonblocking
 		fcntl(servSock, F_SETFL, O_NONBLOCK);
+		// We must own the socket to receive the SIGIO message
+		if (fcntl(servSock, F_SETOWN, getpid()) < 0)
+			fprintf(stderr, "Unable to set process owner to us");
 
 		// Bind to ALL the address and set socket to listen
-		if ((bind(servSock, addr->ai_addr, addr->ai_addrlen) == 0) && (listen(servSock, MAXPENDING) == 0))
+		if (bind(servSock, addr->ai_addr, addr->ai_addrlen) < 0 || listen(servSock, MAXPENDING) < 0)
+			goto error;
+		else
 		{
 			// // Print local address of socket
 			// struct sockaddr_storage localAddr;
@@ -69,20 +82,18 @@ int setupTCPServerSocket(const char *service)
 			// {
 			// 	// bindeando
 			// }
-		}
-		else
-			goto error;
+		};
 
+		fd[fdCount++] = servSock;
 		continue;
 	error:
 		// Manejo de error, fallo en bind
 		close(servSock); // Close and try with the next one
-		servSock = -1;
 	}
 
 	freeaddrinfo(servAddr);
 
-	return servSock;
+	return fdCount;
 }
 
 int acceptTCPConnection(int servSock)

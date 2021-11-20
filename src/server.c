@@ -17,7 +17,7 @@
 
 #define hasFlag(x, f) (bool)((x) & (f))
 
-static int tcpSocket;
+static int tcpSockets[2] = {-1};
 static int epollfd;
 static bool sigioPending = false;
 
@@ -71,9 +71,9 @@ static Handle eventAdd(EventData eventData, uint32_t epollFlags)
 	return eventId;
 }
 
-static bool acceptClient()
+static bool acceptClient(int socket)
 {
-	int clientSocket = acceptTCPConnection(tcpSocket);
+	int clientSocket = acceptTCPConnection(socket);
 	// No pending connection
 	if (clientSocket < 0)
 		return true;
@@ -174,9 +174,9 @@ static void processClient(ClientData *client)
 static void processEvent(struct epoll_event event)
 {
 	EventData *eventData = Pool_GetRef(evDataPool, event.data.u32);
-	if (eventData->fd == tcpSocket && event.events & EPOLLIN)
+	if (eventData->type == ST_PASSIVE && event.events & EPOLLIN)
 	{
-		bool newClient = acceptClient();
+		bool newClient = acceptClient(eventData->fd);
 		// Could have more clients waiting, reschedule
 		eventData->readReady = newClient;
 	}
@@ -199,7 +199,10 @@ static void sigioHandler()
 static void closeServer()
 {
 	close(epollfd);
-	close(tcpSocket);
+	for (int i = 0; i < sizeof(tcpSockets) / sizeof(*tcpSockets); i++)
+		if (tcpSockets[i] > 0)
+			close(tcpSockets[i]);
+
 	Pool_Dispose(evDataPool);
 	Pool_Dispose(clients);
 	exit(0);
@@ -211,8 +214,8 @@ void startServer(const char *port)
 	close(STDIN_FILENO);
 	open("/dev/null", O_WRONLY);
 
-	tcpSocket = setupTCPServerSocket(port);
-	if (tcpSocket < 0)
+	int count = setupTCPServerSocket(port, tcpSockets);
+	if (count <= 0)
 		log(FATAL, "Cannot open TCP socket");
 
 	// Set signal handler for SIGIO
@@ -220,9 +223,6 @@ void startServer(const char *port)
 	sigfillset(&handler.sa_mask);
 	if (sigaction(SIGIO, &handler, NULL) < 0)
 		log(FATAL, "sigaction() failed for SIGIO");
-	// We must own the socket to receive the SIGIO message
-	if (fcntl(tcpSocket, F_SETOWN, getpid()) < 0)
-		fprintf(stderr, "Unable to set process owner to us");
 
 	handler.sa_handler = closeServer;
 	sigaction(SIGINT, &handler, NULL);
@@ -243,12 +243,13 @@ void startServer(const char *port)
 	clients = Pool_Create(sizeof(ClientData));
 
 	// Add passive socket to epoll
-	eventAdd(
-	    (EventData){
-	        .fd = tcpSocket,
-	        .type = ST_PASSIVE,
-	    },
-	    EPOLLIN);
+	for (int i = 0; i < count; i++)
+		eventAdd(
+		    (EventData){
+		        .fd = tcpSockets[i],
+		        .type = ST_PASSIVE,
+		    },
+		    EPOLLIN);
 }
 
 void processingLoop()
