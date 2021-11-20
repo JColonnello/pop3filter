@@ -1,7 +1,7 @@
 SOURCE_DIR := src
 BUILD_DIR := build
 
-TARGET := server
+TARGET := pop3filter
 
 RE_SOURCES := $(shell find $(SOURCE_DIR)/ -type f -name "*.re")
 C_SOURCES := $(shell find $(SOURCE_DIR)/ -type f -name "*.c") $(RE_SOURCES:%.re=%.c)
