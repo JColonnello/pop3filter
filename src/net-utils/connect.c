@@ -23,7 +23,7 @@ bool resolve_address(char *address, uint16_t port, struct addrinfo ** addrinfo);
 
 
 int startTCPConnection(const char *hostname, const char *port){
-    int connSock, ret;
+    int ret;
     
     struct addrinfo *servAddr;
     if(!resolve_address(hostname, port, &servAddr)) {
@@ -33,30 +33,38 @@ int startTCPConnection(const char *hostname, const char *port){
     }
 
     printf(" Trying to connect to %s:%d\n", hostname, port);
+    
+    int connSock = -1;
+	for (struct addrinfo *addr = servAddr; addr != NULL && connSock == -1; addr = addr->ai_next) {
+        
+        connSock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
 
-    connSock = socket(servAddr->ai_family, SOCK_STREAM, IPPROTO_TCP);
+        if (connSock >= 0)
+        {
+            goto finalize;
+        }
 
-    if (connSock == -1)
-    {
-        // TODO handle error
-        goto connection_failed;
+        ret = connect(connSock, servAddr->ai_addr, servAddr->ai_addrlen);
+        if (ret == 0)
+        {
+            goto finalize;
+        }
+            
     }
-
-    ret = connect(connSock, servAddr->ai_addr, servAddr->ai_addrlen);
-    if (ret < 0)
-    {
-        printf(" Can't connect. Check if the server is working property.\n");
-        goto connection_failed;
-    }
-
-    return ret;
-    connection_failed:
-        close(connSock);
-        connSock = -1;
-        return -1;
+connection_failed:
+    printf(" Can't connect. Check if the server is working property.\n");
+    close(connSock);
+    connSock = -1;
+finalize:
+    return connSock;
+    
     
 }
 
+
+enum ConnectionResult connectToServer(int task, int *fd){
+
+}
 
 
 bool
