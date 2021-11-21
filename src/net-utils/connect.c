@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "connect.h"
 #include <errno.h>
 #include <unistd.h>
@@ -18,33 +19,65 @@
 #include <netdb.h>
 #include <limits.h>
 #include <errno.h>
+#include <signal.h>
 
-bool resolve_address(char *address, uint16_t port, struct addrinfo ** addrinfo);
+void signalfd_setup(void) {
+    int sfd;
+    sigset_t mask;
 
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGRTMIN);
+    sigprocmask(SIG_BLOCK, &mask, NULL); //we block the signal
+    sfd = signalfd(-1, &mask, 0);
+    //add it to the event queue
+}
 
 int startTCPConnection(const char *hostname, const char *port){
     int ret;
+    struct gaicb *host;
+    struct addrinfo *hints;
+    struct sigevent sig;
+    struct sockaddr_in serv_addr;
+    host = calloc(1, sizeof(struct gaicb));
+    hints = calloc(1, sizeof(struct addrinfo));
+
+    hints->ai_family = AF_UNSPEC; //we dont care if its v4 or v6
+    hints->ai_socktype = SOCK_STREAM;
+    hints->ai_flags = AI_PASSIVE;
+    hints->ai_protocol= IPPROTO_TCP;
+    //every other field is NULL-d by calloc
+
+    host->ar_service = &port; //the port we will listen on
+    host->ar_request = hints;
+    host->ar_name = &hostname;
+
+    sig.sigev_notify = SIGEV_SIGNAL;
+    sig.sigev_value.sival_ptr = host;
+    sig.sigev_signo = SIGRTMIN;
+
+    uint16_t portUnit16 = (uint16_t) ~((unsigned int) atoi(port));
+    serv_addr.sin_family = AF_UNSPEC;
+    serv_addr.sin_port = htons(portUnit16);
     
-    struct addrinfo *servAddr;
-    if(!resolve_address(hostname, port, &servAddr)) {
+    if(0 != getaddrinfo_a(GAI_NOWAIT, &host, 1, &sig)) {
         perror("Unable to resolve address");
-        // TODO handle error
         goto connection_failed;
     }
+    signalfd_setup();
 
-    printf(" Trying to connect to %s:%d\n", hostname, port);
+    printf(" Trying to connect to %s:%s\n", hostname, port);
     
     int connSock = -1;
-	for (struct addrinfo *addr = servAddr; addr != NULL && connSock == -1; addr = addr->ai_next) {
+	for (struct addrinfo *addr = hints; addr != NULL && connSock == -1; addr = addr->ai_next) {
         
         connSock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
 
-        if (connSock >= 0)
+        if (connSock < 0)
         {
-            goto finalize;
+            continue;
         }
 
-        ret = connect(connSock, servAddr->ai_addr, servAddr->ai_addrlen);
+        ret = connect(connSock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
         if (ret == 0)
         {
             goto finalize;
@@ -64,26 +97,4 @@ finalize:
 
 enum ConnectionResult connectToServer(int task, int *fd){
 
-}
-
-
-bool
-resolve_address(char *address, uint16_t port, struct addrinfo ** addrinfo) {
-
-  struct addrinfo addr = {
-          .ai_family    = AF_UNSPEC,    /* Allow IPv4 or IPv6 */
-          .ai_socktype  = SOCK_STREAM,
-          .ai_flags     = AI_PASSIVE,   /* For wildcard IP address */
-          .ai_protocol  = IPPROTO_TCP,           1
-          .ai_canonname = NULL,
-          .ai_addr      = NULL,
-          .ai_next      = NULL,
-  };
-
-  char buff[7];
-  snprintf(buff, sizeof(buff), "%hu", port);
-  if (0 != getaddrinfo(address, buff, &addr, addrinfo)){
-    return false;
-  }
-  return true;
 }
