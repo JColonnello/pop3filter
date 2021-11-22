@@ -1,5 +1,6 @@
 SOURCE_DIR := src
 BUILD_DIR := build
+RE2C ?= : re2c
 
 TARGET := server
 
@@ -10,7 +11,7 @@ OBJS := $(C_SOURCES:%.c=$(BUILD_DIR)/%.o)
 
 DEP_FLAGS := -MMD -MP
 CFLAGS += -g -std=gnu11 -fsanitize=address -Wall -I$(SOURCE_DIR) $(DEP_FLAGS)
-REFLAGS += -f -W -i -c --no-generation-date
+REFLAGS += -W -i --no-generation-date
 
 all: lexer c
 
@@ -35,6 +36,8 @@ $(BUILD_DIR)/%.o: %.c
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(SOURCE_DIR)/parsers/management.c: $(SOURCE_DIR)/parsers/management.re
+	$(RE2C) $(REFLAGS) -c -o $@ -t $*.h $<
 
 -include $(OBJS:%.o=%.d)
 

@@ -1,9 +1,10 @@
 #ifndef ARGS_H
 #define ARGS_H
 
+#include <netinet/ip.h>
 #include <stdbool.h>
 
-typedef struct 
+typedef struct
 {
 	char *logFile;
 	struct sockaddr_in mgmtSock;
@@ -15,4 +16,3 @@ typedef struct
 } ServerArguments;
 
 #endif
-
