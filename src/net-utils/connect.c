@@ -6,9 +6,11 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "net-utils/tcpUtils.h"
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -21,7 +23,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-struct gaicb * host;        //TODO liberar recursos
+struct gaicb host;
 
 int signalfd_setup()
 {
@@ -38,29 +40,37 @@ int signalfd_setup()
 
 int connectHost()
 {
-    struct sockaddr_in serv_addr;
-    uint16_t portUnit16 = (uint16_t) ~((unsigned int) atoi(host->ar_service));
-    serv_addr.sin_family = AF_UNSPEC;
-    serv_addr.sin_port = htons(portUnit16);
-    
+	struct sockaddr_in serv_addr;
+	uint16_t portUnit16 = (uint16_t) ~((unsigned int)atoi(host.ar_service));
+	serv_addr.sin_family = AF_UNSPEC;
+	serv_addr.sin_port = htons(portUnit16);
+
 	struct addrinfo *rp;
-    int ret;
+	int ret;
 	int connSock = -1;
 
-	for (rp = host->ar_result; rp != NULL; rp = rp->ai_next)
+	for (rp = host.ar_result; rp != NULL; rp = rp->ai_next)
 	{
 		connSock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (connSock < 0)
-        {
-            continue;
-        }
-        ret = connect(connSock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-        if (ret == 0)
-        {
-            return connSock;
-        }
-    }
-    return -1;
+		if (connSock < 0)
+		{
+			continue;
+		}
+
+		int buffer = CLIENT_WRITE_BUF * 2;
+		size_t optSize = sizeof(buffer);
+		fcntl(connSock, F_SETFL, O_NONBLOCK);
+		setsockopt(connSock, SOL_SOCKET, SO_SNDBUF, &buffer, optSize);
+		buffer = CLIENT_WRITE_BUF;
+		setsockopt(connSock, SOL_SOCKET, SO_SNDLOWAT, &buffer, optSize);
+
+		ret = connect(connSock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+		if (ret == 0)
+		{
+			return connSock;
+		}
+	}
+	return -1;
 }
 
 int signalfd_read(int fd)
@@ -75,15 +85,16 @@ int signalfd_read(int fd)
 			printf("ERROR handling the signal");
 			return -1;
 		}
-		host = (void *)fdsi.ssi_ptr; // the pointer passed to the sigevent structure
 	}
-	// the result is in the host->ar_result member
-	//return connectHost(host);
+	// the result is in the host.ar_result member
+	// return connectHost(host);
+	free((char *)host.ar_name);
+	free((char *)host.ar_service);
 
-    return 0;
+	return 0;
 }
 
-int resolve_dns(char * hostname, char * port, int async)
+int resolve_dns(char *hostname, char *port, int async)
 {
 	struct addrinfo *request;
 	request = calloc(1, sizeof(struct addrinfo));
@@ -93,23 +104,21 @@ int resolve_dns(char * hostname, char * port, int async)
 	request->ai_protocol = IPPROTO_TCP;
 	// every other field is NULL-d by calloc
 
-	host = calloc(1, sizeof(struct gaicb));
-	host->ar_service = strdup(port); // the port we will listen on
-	host->ar_request = request;
-	host->ar_name = strdup(hostname);
+	host = (struct gaicb){0};
+	host.ar_service = strdup(port); // the port we will listen on
+	host.ar_request = request;
+	host.ar_name = strdup(hostname);
 
 	struct sigevent sig;
 	sig.sigev_notify = SIGEV_SIGNAL;
-	sig.sigev_value.sival_ptr = host;
+	sig.sigev_value.sival_ptr = &host;
 	sig.sigev_signo = SIGRTMIN;
 
 	int flag = async ? GAI_NOWAIT : GAI_WAIT;
-	if (getaddrinfo_a(flag, &host, 1, &sig) != 0)
+	if (getaddrinfo_a(flag, (struct gaicb **)&host, 1, &sig) != 0)
 	{
 		perror("Unable to resolve address");
 		return -1;
 	}
-    return 0;
+	return 0;
 }
-
-

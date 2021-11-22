@@ -114,7 +114,7 @@ int acceptTCPConnection(int servSock)
 			log(FATAL, "accept failed");
 	}
 
-	/// TODO: Set nonblocking and buffer sizes
+	// Set nonblocking and buffer sizes
 	int buffer = CLIENT_WRITE_BUF * 2;
 	size_t optSize = sizeof(buffer);
 	fcntl(clntSock, F_SETFL, O_NONBLOCK);
