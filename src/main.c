@@ -1,11 +1,11 @@
 #include "server.h"
 
-int main(int argc, char * argv[]) 
+int main(int argc, char *argv[])
 {
-	///TODO: Parse arguments
+	/// TODO: Parse arguments
 
-	startServer(argv[1]);
+	startServer("1234");
 	processingLoop();
-	
+
 	return 0;
 }
