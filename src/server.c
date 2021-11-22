@@ -13,14 +13,13 @@
 #include "collections/pool.h"
 #include "collections/queue.h"
 #include "logger.h"
+#include "net-utils/connect.h"
 #include "net-utils/tcpUtils.h"
 
 #define hasFlag(x, f) (bool)((x) & (f))
 
 static int tcpSockets[2] = {-1};
 static int epollfd;
-static bool sigioPending = false;
-
 static Pool *evDataPool;
 static Pool *clients;
 
@@ -45,6 +44,7 @@ typedef enum
 	ST_PASSIVE,
 	ST_CLIENT,
 	ST_SERVER,
+	ST_SIGNAL,
 } SocketType;
 
 typedef struct
@@ -180,6 +180,10 @@ static void processEvent(struct epoll_event event)
 		// Could have more clients waiting, reschedule
 		eventData->readReady = newClient;
 	}
+	else if (eventData->type == ST_SIGNAL && event.events & EPOLLIN)
+	{
+		/// TODO: signalfd manage
+	}
 	else if (eventData->type)
 	{
 		if (event.events & EPOLLOUT)
@@ -189,11 +193,6 @@ static void processEvent(struct epoll_event event)
 	}
 	else
 		log(ERROR, "Unhandled event");
-}
-
-static void sigioHandler()
-{
-	sigioPending = true;
 }
 
 static void closeServer()
@@ -219,19 +218,20 @@ void startServer(const char *port)
 		log(FATAL, "Cannot open TCP socket");
 
 	// Set signal handler for SIGIO
-	struct sigaction handler = (struct sigaction){.sa_handler = sigioHandler};
-	sigfillset(&handler.sa_mask);
-	if (sigaction(SIGIO, &handler, NULL) < 0)
-		log(FATAL, "sigaction() failed for SIGIO");
+	struct sigaction handler;
+	// handler.sa_handler = sigioHandler;
+	// sigfillset(&handler.sa_mask);
+	// if (sigaction(SIGIO, &handler, NULL) < 0)
+	// 	log(FATAL, "sigaction() failed for SIGIO");
 
 	handler.sa_handler = closeServer;
 	sigaction(SIGINT, &handler, NULL);
 
 	// Enable SIGIO
-	sigset_t mask, oldmask;
-	sigemptyset(&mask);
-	sigaddset(&mask, SIGIO);
-	sigprocmask(SIG_UNBLOCK, &mask, &oldmask);
+	// sigset_t mask, oldmask;
+	// sigemptyset(&mask);
+	// sigaddset(&mask, SIGIO);
+	// sigprocmask(SIG_UNBLOCK, &mask, &oldmask);
 
 	// Create epoll fd
 	epollfd = epoll_create1(0);
@@ -250,6 +250,15 @@ void startServer(const char *port)
 		        .type = ST_PASSIVE,
 		    },
 		    EPOLLIN);
+
+	int sigfd = signalfd_setup();
+	// Add signalfd to epoll
+	eventAdd(
+	    (EventData){
+	        .fd = sigfd,
+	        .type = ST_SIGNAL,
+	    },
+	    EPOLLIN);
 }
 
 void processingLoop()
@@ -263,16 +272,16 @@ void processingLoop()
 		struct epoll_event events[max_events];
 
 		// Block and check for SIGIO event
-		sigset_t oldMask;
-		sigprocmask(SIG_BLOCK, &sigioMask, &oldMask);
-		if (sigioPending)
-		{
-			/// TODO: Process signal
-			sigioPending = false;
-		}
+		// sigset_t oldMask;
+		// sigprocmask(SIG_BLOCK, &sigioMask, &oldMask);
+		// if (sigioPending)
+		// {
+		// 	/// TODO: Process signal
+		// 	sigioPending = false;
+		// }
 
 		// Wait for events
-		int nfds = epoll_pwait(epollfd, events, max_events, -1, &oldMask);
+		int nfds = epoll_wait(epollfd, events, max_events, -1);
 		if (nfds == -1)
 		{
 			if (errno == EINTR)
@@ -282,7 +291,7 @@ void processingLoop()
 		}
 
 		// Re-enable SIGIO
-		sigprocmask(SIG_UNBLOCK, &sigioMask, NULL);
+		// sigprocmask(SIG_UNBLOCK, &sigioMask, NULL);
 
 		for (int i = 0; i < nfds; i++)
 			processEvent(events[i]);
