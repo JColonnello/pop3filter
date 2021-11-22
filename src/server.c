@@ -183,6 +183,10 @@ static void processEvent(struct epoll_event event)
 	else if (eventData->type == ST_SIGNAL && event.events & EPOLLIN)
 	{
 		/// TODO: signalfd manage
+		
+		signalfd_read(eventData->fd);
+
+		
 	}
 	else if (eventData->type)
 	{

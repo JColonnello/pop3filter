@@ -14,3 +14,5 @@ int startTCPConnection(const char *hostname, const char *port);
 // Si completa devuelve fd
 enum ConnectionResult connectToServer(int task, int *fd);
 int signalfd_setup();
+int signalfd_read(int fd);
+
