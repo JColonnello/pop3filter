@@ -1,17 +1,24 @@
 #define _GNU_SOURCE
 #include "connect.h"
-#include <errno.h>
-#include <unistd.h>
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netdb.h>
 #include <string.h>
+#include <unistd.h>
 
+#include <arpa/inet.h>
+#include <ctype.h>
+#include <errno.h>
+#include <limits.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+<<<<<<< HEAD
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
@@ -153,19 +160,14 @@ int startTCPConnection(const char *hostname, const char *port){
         {
             goto finalize;
         }
-            
     }
 connection_failed:
     printf(" Can't connect. Check if the server is working property.\n");
     close(connSock);
     connSock = -1;
 finalize:
-    return connSock;
-    
-    
+    return connSock;    
 }
 
 
-enum ConnectionResult connectToServer(int task, int *fd){
 
-}

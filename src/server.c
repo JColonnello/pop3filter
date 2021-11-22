@@ -1,136 +1,296 @@
-#include <errno.h>
-#include <math.h>
-#include <stdbool.h>
 #include <stdlib.h>
-#include <netinet/in.h>
+#define _GNU_SOURCE
 
-#include <assert.h>
-#include <stddef.h>
-#include <string.h>
-#include <sys/select.h>
-#include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/epoll.h>
+#include <unistd.h>
 
-#include "net-utils/tcpUtils.h"
+#include "collections/pool.h"
+#include "collections/queue.h"
 #include "logger.h"
-#include "parsers/lexer.h"
+#include "net-utils/tcpUtils.h"
 
-#define MAX_CLIENTS 511
-#define MAX_INPUT 1024
-#define DEFAULT_PORT "9999"
+#define hasFlag(x, f) (bool)((x) & (f))
 
-#define MAX(x,y) ((x) > (y)) ? (x) : (y)
+static int tcpSockets[2] = {-1};
+static int epollfd;
+static bool sigioPending = false;
+
+static Pool *evDataPool;
+static Pool *clients;
+
+typedef enum
+{
+	CS_CLIENT_SERVER = 1,
+	CS_SERVER_CLIENT = 2,
+	CS_SERVER_FILTER = 4,
+	CS_FILTER_CLIENT = 8,
+} CommSegment;
 
 typedef struct
 {
-	int socket;
-	Input tcpState;
+	int id;
+	Handle clientEvent;
+	Handle serverEvent;
+	CommSegment activeSegments;
 } ClientData;
 
-static ClientData *clients[MAX_CLIENTS];
-static int socketTCP;
+typedef enum
+{
+	ST_PASSIVE,
+	ST_CLIENT,
+	ST_SERVER,
+} SocketType;
+
+typedef struct
+{
+	int fd;
+	Handle clientId;
+	SocketType type;
+	bool readReady, writeReady;
+} EventData;
+
+static Handle eventAdd(EventData eventData, uint32_t epollFlags)
+{
+	Handle eventId = Pool_Add(evDataPool, &eventData);
+	if (eventId < 0)
+		log(FATAL, "Out of memory");
+
+	struct epoll_event ev = (struct epoll_event){
+	    .events = epollFlags | EPOLLET,
+	    .data.u32 = eventId,
+	};
+	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, eventData.fd, &ev) == -1)
+		log(FATAL, "epoll_ctl: conn_sock");
+
+	return eventId;
+}
+
+static bool acceptClient(int socket)
+{
+	int clientSocket = acceptTCPConnection(socket);
+	// No pending connection
+	if (clientSocket < 0)
+		return true;
+
+	ClientData clientData = {};
+	Handle clientId = Pool_Add(clients, &clientData);
+	if (clientId < 0)
+		log(FATAL, "Out of memory");
+
+	// Add to epoll
+	Handle clientEvent = eventAdd(
+	    (EventData){
+	        .clientId = clientId,
+	        .fd = clientSocket,
+	        .type = ST_CLIENT,
+	    },
+	    EPOLLIN | EPOLLOUT);
+	// Set backward reference
+	ClientData *ref = Pool_GetRef(clients, clientId);
+	ref->clientEvent = clientEvent;
+	ref->id = clientId;
+	ref->activeSegments = CS_CLIENT_SERVER;
+
+	return false;
+}
+
+static void closeClient(ClientData *client, CommSegment level)
+{
+	switch (level)
+	{
+	case CS_CLIENT_SERVER: {
+		EventData *clientEvent = Pool_GetRef(evDataPool, client->clientEvent);
+		clientEvent->readReady = false;
+		client->activeSegments &= ~CS_CLIENT_SERVER;
+		break;
+	}
+	case CS_SERVER_CLIENT: {
+		EventData *serverEvent = Pool_GetRef(evDataPool, client->serverEvent);
+		serverEvent->readReady = false;
+		client->activeSegments &= ~CS_SERVER_CLIENT;
+		break;
+	}
+	default:
+		break;
+	}
+
+	// Client-server is closed both ways
+	if ((CS_CLIENT_SERVER | CS_SERVER_CLIENT) & level && !hasFlag(client->activeSegments, CS_SERVER_CLIENT) &&
+	    !hasFlag(client->activeSegments, CS_CLIENT_SERVER))
+	{
+		// Don't release EventData, handler could still be referenced
+		EventData *clientEvent = Pool_GetRef(evDataPool, client->clientEvent);
+		int fd = clientEvent->fd;
+		close(fd);
+		// epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL);
+	}
+
+	// Free client structures
+	if (!client->activeSegments)
+	{
+		Pool_Remove(evDataPool, client->clientEvent);
+		Pool_Remove(evDataPool, client->serverEvent);
+		Pool_Remove(clients, client->id);
+	}
+}
+
+static void processClient(ClientData *client)
+{
+	EventData *clientEvent = Pool_GetRef(evDataPool, client->clientEvent);
+	// EventData *serverEvent = Pool_GetRef(evDataPool, client->serverEvent);
+
+	/// TODO: Process client -> server stream;
+	// if (client->activeSegments & CS_CLIENT_SERVER && clientEvent->readReady && serverEvent != NULL &&
+	// serverEvent->writeReady)
+	if (client->activeSegments & CS_CLIENT_SERVER && clientEvent->readReady)
+	{
+		bool exhausted;
+		// Skip
+		static char buffer[CLIENT_WRITE_BUF];
+		ssize_t skip = read(clientEvent->fd, buffer, sizeof(buffer));
+		if (skip <= 0)
+		{
+			// Close client
+			closeClient(client, CS_CLIENT_SERVER);
+			return;
+		}
+		exhausted = (skip < CLIENT_WRITE_BUF);
+		clientEvent->readReady = !exhausted;
+	}
+	// if (client->activeSegments & CS_SERVER_CLIENT && clientEvent->writeReady && serverEvent != NULL &&
+	// serverEvent->readReady)
+	if (client->activeSegments & CS_SERVER_CLIENT && clientEvent->writeReady)
+	{
+		// closeClient(client, CS_SERVER_CLIENT);
+	}
+}
+
+static void processEvent(struct epoll_event event)
+{
+	EventData *eventData = Pool_GetRef(evDataPool, event.data.u32);
+	if (eventData->type == ST_PASSIVE && event.events & EPOLLIN)
+	{
+		bool newClient = acceptClient(eventData->fd);
+		// Could have more clients waiting, reschedule
+		eventData->readReady = newClient;
+	}
+	else if (eventData->type)
+	{
+		if (event.events & EPOLLOUT)
+			eventData->writeReady = true;
+		if (event.events & EPOLLIN)
+			eventData->readReady = true;
+	}
+	else
+		log(ERROR, "Unhandled event");
+}
+
+static void sigioHandler()
+{
+	sigioPending = true;
+}
+
+static void closeServer()
+{
+	close(epollfd);
+	for (int i = 0; i < sizeof(tcpSockets) / sizeof(*tcpSockets); i++)
+		if (tcpSockets[i] > 0)
+			close(tcpSockets[i]);
+
+	Pool_Dispose(evDataPool);
+	Pool_Dispose(clients);
+	exit(0);
+}
 
 void startServer(const char *port)
 {
-	log(INFO, "Arranco");
+	// Close stdio
+	close(STDIN_FILENO);
+	open("/dev/null", O_WRONLY);
 
-	if(port == NULL)
-		port = DEFAULT_PORT;
+	int count = setupTCPServerSocket(port, tcpSockets);
+	if (count <= 0)
+		log(FATAL, "Cannot open TCP socket");
 
-	log(DEBUG, "Listen on port: %s", port);
-	socketTCP = setupTCPServerSocket(port);
-	if(socketTCP < 0)
-	{
-		log(ERROR, "Cannot open TCP socket");
-		exit(1);
-	}
+	// Set signal handler for SIGIO
+	struct sigaction handler = (struct sigaction){.sa_handler = sigioHandler};
+	sigfillset(&handler.sa_mask);
+	if (sigaction(SIGIO, &handler, NULL) < 0)
+		log(FATAL, "sigaction() failed for SIGIO");
 
-	memset(clients, 0, sizeof(clients));
+	handler.sa_handler = closeServer;
+	sigaction(SIGINT, &handler, NULL);
+
+	// Enable SIGIO
+	sigset_t mask, oldmask;
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGIO);
+	sigprocmask(SIG_UNBLOCK, &mask, &oldmask);
+
+	// Create epoll fd
+	epollfd = epoll_create1(0);
+	if (epollfd == -1)
+		log(FATAL, "Failed creating epoll handler");
+
+	// Create collections
+	evDataPool = Pool_Create(sizeof(EventData));
+	clients = Pool_Create(sizeof(ClientData));
+
+	// Add passive socket to epoll
+	for (int i = 0; i < count; i++)
+		eventAdd(
+		    (EventData){
+		        .fd = tcpSockets[i],
+		        .type = ST_PASSIVE,
+		    },
+		    EPOLLIN);
 }
 
 void processingLoop()
 {
-	fd_set readfds, writefds;
-
-	for(;;)
+	sigset_t sigioMask;
+	sigemptyset(&sigioMask);
+	sigaddset(&sigioMask, SI_SIGIO);
+	for (;;)
 	{
-		FD_ZERO(&readfds); 
-		FD_ZERO(&writefds); 
-		FD_SET(socketTCP, &readfds);
-		int max_sd = socketTCP;			 //Necesito el maximo para el select
+		const int max_events = 10;
+		struct epoll_event events[max_events];
 
-		//Add clients
-		for(int i = 0; i < MAX_CLIENTS; i++) { 
-			if(clients[i] == NULL)
-				continue;
-
-			int sd = clients[i]->socket;
-			FD_SET(sd, clients[i]->tcpState.writeCount > 0 ? &writefds : &readfds);
-			max_sd = MAX(max_sd, sd);
+		// Block and check for SIGIO event
+		sigset_t oldMask;
+		sigprocmask(SIG_BLOCK, &sigioMask, &oldMask);
+		if (sigioPending)
+		{
+			/// TODO: Process signal
+			sigioPending = false;
 		}
 
-		//Espero la actividad de algun sockdet
-		int ready = select(max_sd + 1, &readfds, &writefds, NULL, NULL);   
-		if(ready < 0 && (errno!=EINTR)) {
-			log(ERROR, "select() failed: %s", strerror(errno));
+		// Wait for events
+		int nfds = epoll_pwait(epollfd, events, max_events, -1, &oldMask);
+		if (nfds == -1)
+		{
+			if (errno == EINTR)
+				nfds = 0;
+			else
+				log(FATAL, "epoll_pwait");
 		}
 
-		//New TCP connections
-		if(FD_ISSET(socketTCP, &readfds)) {
-			log(INFO, "Entro en FD_ISSET");
+		// Re-enable SIGIO
+		sigprocmask(SIG_UNBLOCK, &sigioMask, NULL);
 
-			for(int i = 0; i < MAX_CLIENTS; i++){
-				if(clients[i] == NULL) {
-					int newSocket = acceptTCPConnection(socketTCP);
-					if(newSocket < 0)
-						break;
+		for (int i = 0; i < nfds; i++)
+			processEvent(events[i]);
 
-					clients[i] = malloc(sizeof(ClientData));
-					if(clients[i]) {} //TODO: manejar error
-
-					clients[i]->socket = newSocket;
-					initState(&clients[i]->tcpState);
-					break;
-				}
-			}
-		}
-
-		//TCP Clients
-		for(int i = 0; i < MAX_CLIENTS; i++){
-			ClientData *client = clients[i];
-			bool closeClient = false;
-
-			if(client == NULL)
-				continue;
-
-			int sd = client->socket;
-			if(FD_ISSET(sd, &readfds)){
-				size_t valread = processTcpInput(&client->tcpState, client->socket, MAX_INPUT);
-				if(valread == 0)
-					closeClient = true;
-			}
-			else if(FD_ISSET(sd, &writefds))
-			{
-				size_t count = client->tcpState.writeCount;
-				char *buffer = client->tcpState.writeBuf;
-				size_t sent = write(client->socket, buffer, count);
-				if(sent < 0)
-					closeClient = true;
-				else if(sent < count)
-					memmove(buffer, &buffer[sent], count - sent);
-				client->tcpState.writeCount -= sent;
-			}
-
-			if(closeClient)
-			{
-				close(sd);
-				free(client);
-				clients[i] = NULL;
-				log(INFO, "Closed client: %d", i);
-			}
-		}
+		int clientCount = Pool_Count(clients);
+		Handle activeClients[clientCount];
+		Pool_ToIndexArray(clients, activeClients);
+		for (int i = 0; i < clientCount; i++)
+			processClient(Pool_GetRef(clients, activeClients[i]));
 	}
-	return;
-
 }
