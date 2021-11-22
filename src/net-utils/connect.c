@@ -21,7 +21,7 @@
 #include <errno.h>
 #include <signal.h>
 
-void signalfd_setup(void) {
+int signalfd_setup(void) {
     int sfd;
     sigset_t mask;
 
@@ -30,6 +30,77 @@ void signalfd_setup(void) {
     sigprocmask(SIG_BLOCK, &mask, NULL); //we block the signal
     sfd = signalfd(-1, &mask, 0);
     //add it to the event queue
+}
+
+return signalfd_read(int fd) {
+    ssize_t s;
+    struct signalfd_siginfo fdsi;
+    struct gaicb *host;
+
+    while((s = read(fd, &fdsi, sizeof(struct signalfd_siginfo))) > 0){
+    if (s != sizeof(struct signalfd_siginfo)) {
+        printf("ERROR handling the signal");
+        return;
+    }
+    host = fdsi.ssi_ptr; //the pointer passed to the sigevent structure
+    //the result is in the host->ar_result member
+    return connectHost(host);
+    
+}
+
+
+int resolve_dns(int async) {
+    struct addrinfo *request;
+    request = calloc(1, sizeof(struct addrinfo));
+    request->ai_family = AF_UNSPEC; //we dont care if its v4 or v6
+    request->ai_socktype = SOCK_STREAM;
+    request->ai_flags = AI_PASSIVE;
+    request->ai_protocol= IPPROTO_TCP;
+    //every other field is NULL-d by calloc
+
+    struct gaicb *host;     //THE ELEMENTS CORRESPOND TO THE ARGUMENTS OF getaddrinfo
+    host = calloc(1, sizeof(struct gaicb));
+    host->ar_service = &port; //the port we will listen on
+    host->ar_request = request;
+    host->ar_name = &hostname;
+
+    struct sigevent sig;
+    sig.sigev_notify = SIGEV_SIGNAL;
+    sig.sigev_value.sival_ptr = host;
+    sig.sigev_signo = SIGRTMIN;
+
+    int flag;
+    async ? flag = GAI_NOWAIT : flag = GAI_WAIT;
+    if(getaddrinfo_a(flag) != 0){
+        perror("Unable to resolve address");
+        return -1;
+    }
+    int sfd = signalfd_setup();
+    if(sfd == -1){
+        perror("Unable to setup the signal file descriptor");
+        return -1;
+    }
+    return sfd;
+}
+
+
+int connectHost(struct gaicb * host){
+    struct addrinfo *rp, *result;
+    int fd= -1;
+
+    result = host->ar_result;
+    for(rp = result; rp != NULL; rp = rp->ai_next) {
+        fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        bind(fd, rp->ai_addr, rp->ai_addrlen);
+        listen(fd, SOMAXCONN);
+        //error checks are missing!
+
+        freeaddrinfo(host->ar_request);
+        freeaddrinfo(result);
+        //you should free everything you put into the gaicb
+    }
+
+    return fd;
 }
 
 int startTCPConnection(const char *hostname, const char *port){
