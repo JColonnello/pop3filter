@@ -5,9 +5,9 @@
 
 
 
-RequestStatus lexRequest(const char *str, size_t len, const char **data)
+RequestStatus lexRequest(const char *str, size_t len, const char **data, size_t *dataLen)
 {
-	const char *YYCURSOR = str, *YYLIMIT = str + len, *YYMARKER, *arg;
+	const char *YYCURSOR = str, *YYLIMIT = str + len, *YYMARKER, *arg, *end;
 	RequestStatus result = ERROR;
 	enum YYCONDTYPE cond = yyccmd;
 	const char *yyt1;
@@ -28,10 +28,11 @@ RequestStatus lexRequest(const char *str, size_t len, const char **data)
 yyc_cmd:
 	yych = *YYCURSOR;
 	switch (yych) {
+	case '\n':	goto yy4;
 	case 'S':
-	case 's':	goto yy4;
+	case 's':	goto yy6;
 	default:
-		if (YYLIMIT <= YYCURSOR) goto yy27;
+		if (YYLIMIT <= YYCURSOR) goto yy30;
 		goto yy2;
 	}
 yy2:
@@ -39,157 +40,174 @@ yy2:
 yy3:
 	{ return ERROR; }
 yy4:
+	++YYCURSOR;
+	{ return result; }
+yy6:
 	yych = *(YYMARKER = ++YYCURSOR);
 	switch (yych) {
 	case 'E':
-	case 'e':	goto yy5;
+	case 'e':	goto yy7;
 	case 'T':
-	case 't':	goto yy7;
+	case 't':	goto yy9;
 	default:	goto yy3;
 	}
-yy5:
-	yych = *++YYCURSOR;
-	switch (yych) {
-	case 'T':
-	case 't':	goto yy8;
-	default:	goto yy6;
-	}
-yy6:
-	YYCURSOR = YYMARKER;
-	goto yy3;
 yy7:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case 'A':
-	case 'a':	goto yy9;
-	default:	goto yy6;
+	case 'T':
+	case 't':	goto yy10;
+	default:	goto yy8;
 	}
 yy8:
-	yych = *++YYCURSOR;
-	switch (yych) {
-	case '_':	goto yy10;
-	default:	goto yy6;
-	}
+	YYCURSOR = YYMARKER;
+	goto yy3;
 yy9:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case 'T':
-	case 't':	goto yy11;
-	default:	goto yy6;
+	case 'A':
+	case 'a':	goto yy11;
+	default:	goto yy8;
 	}
 yy10:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case 'E':
-	case 'e':	goto yy12;
-	default:	goto yy6;
+	case '_':	goto yy12;
+	default:	goto yy8;
 	}
 yy11:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case 'S':
-	case 's':	goto yy13;
-	default:	goto yy6;
+	case 'T':
+	case 't':	goto yy13;
+	default:	goto yy8;
 	}
 yy12:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case 'R':
-	case 'r':	goto yy15;
-	default:	goto yy6;
+	case 'E':
+	case 'e':	goto yy14;
+	default:	goto yy8;
 	}
 yy13:
+	yych = *++YYCURSOR;
+	switch (yych) {
+	case 'S':
+	case 's':	goto yy15;
+	default:	goto yy8;
+	}
+yy14:
+	yych = *++YYCURSOR;
+	switch (yych) {
+	case 'R':
+	case 'r':	goto yy17;
+	default:	goto yy8;
+	}
+yy15:
 	++YYCURSOR;
 	cond = yycdone;
 	{ result = STATS; continue; }
-yy15:
-	yych = *++YYCURSOR;
-	switch (yych) {
-	case 'R':
-	case 'r':	goto yy16;
-	default:	goto yy6;
-	}
-yy16:
-	yych = *++YYCURSOR;
-	switch (yych) {
-	case 'O':
-	case 'o':	goto yy17;
-	default:	goto yy6;
-	}
 yy17:
 	yych = *++YYCURSOR;
 	switch (yych) {
 	case 'R':
 	case 'r':	goto yy18;
-	default:	goto yy6;
+	default:	goto yy8;
 	}
 yy18:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case '_':	goto yy19;
-	default:	goto yy6;
+	case 'O':
+	case 'o':	goto yy19;
+	default:	goto yy8;
 	}
 yy19:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case 'F':
-	case 'f':	goto yy20;
-	default:	goto yy6;
+	case 'R':
+	case 'r':	goto yy20;
+	default:	goto yy8;
 	}
 yy20:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case 'I':
-	case 'i':	goto yy21;
-	default:	goto yy6;
+	case '_':	goto yy21;
+	default:	goto yy8;
 	}
 yy21:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case 'L':
-	case 'l':	goto yy22;
-	default:	goto yy6;
+	case 'F':
+	case 'f':	goto yy22;
+	default:	goto yy8;
 	}
 yy22:
 	yych = *++YYCURSOR;
 	switch (yych) {
-	case 'E':
-	case 'e':	goto yy23;
-	default:	goto yy6;
+	case 'I':
+	case 'i':	goto yy23;
+	default:	goto yy8;
 	}
 yy23:
+	yych = *++YYCURSOR;
+	switch (yych) {
+	case 'L':
+	case 'l':	goto yy24;
+	default:	goto yy8;
+	}
+yy24:
+	yych = *++YYCURSOR;
+	switch (yych) {
+	case 'E':
+	case 'e':	goto yy25;
+	default:	goto yy8;
+	}
+yy25:
+	yych = *++YYCURSOR;
+	switch (yych) {
+	case ' ':	goto yy26;
+	default:	goto yy8;
+	}
+yy26:
 	++YYCURSOR;
 	yyt1 = YYCURSOR;
 	yych = *YYCURSOR;
 	if (yych <= 0x00) {
-		if (YYLIMIT <= YYCURSOR) goto yy24;
-		goto yy25;
+		if (YYLIMIT <= YYCURSOR) goto yy27;
+		goto yy28;
 	}
-	goto yy26;
-yy24:
-	arg = yyt1;
-	cond = yycdone;
-	{ result = SET_ERROR_FILE; *data = arg; continue; }
-yy25:
-	yych = *++YYCURSOR;
-yy26:
-	switch (yych) {
-	case '\n':	goto yy24;
-	default:
-		if (YYLIMIT <= YYCURSOR) goto yy24;
-		goto yy25;
-	}
+	goto yy29;
 yy27:
+	arg = yyt1;
+	end = YYCURSOR;
+	cond = yycdone;
+	{ result = SET_ERROR_FILE; *data = arg; *dataLen = end - arg; continue; }
+yy28:
+	yych = *++YYCURSOR;
+yy29:
+	switch (yych) {
+	case '\n':	goto yy27;
+	default:
+		if (YYLIMIT <= YYCURSOR) goto yy27;
+		goto yy28;
+	}
+yy30:
 	{ return result; }
 /* *********************************** */
 yyc_done:
 	yych = *YYCURSOR;
-	if (yych >= 0x01) goto yy30;
-	if (YYLIMIT <= YYCURSOR) goto yy32;
-yy30:
+	switch (yych) {
+	case '\n':	goto yy35;
+	default:
+		if (YYLIMIT <= YYCURSOR) goto yy37;
+		goto yy33;
+	}
+yy33:
 	++YYCURSOR;
 	{ return ERROR; }
-yy32:
+yy35:
+	++YYCURSOR;
+	{ return result; }
+yy37:
 	{ return result; }
 }
 

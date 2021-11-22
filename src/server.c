@@ -13,16 +13,21 @@
 #include "collections/pool.h"
 #include "collections/queue.h"
 #include "logger.h"
+#include "management/management.h"
 #include "net-utils/tcpUtils.h"
+#include "net-utils/udpUtils.h"
 
 #define hasFlag(x, f) (bool)((x) & (f))
 
 static int tcpSockets[2] = {-1};
+static int udpSockets[2] = {-1};
 static int epollfd;
 static bool sigioPending = false;
 
 static Pool *evDataPool;
 static Pool *clients;
+
+ServerArguments serverArguments;
 
 typedef enum
 {
@@ -42,7 +47,8 @@ typedef struct
 
 typedef enum
 {
-	ST_PASSIVE,
+	ST_PASSIVE_TCP,
+	ST_PASSIVE_UDP,
 	ST_CLIENT,
 	ST_SERVER,
 } SocketType;
@@ -59,14 +65,14 @@ static Handle eventAdd(EventData eventData, uint32_t epollFlags)
 {
 	Handle eventId = Pool_Add(evDataPool, &eventData);
 	if (eventId < 0)
-		log(FATAL, "Out of memory");
+		log(LOG_FATAL, "Out of memory");
 
 	struct epoll_event ev = (struct epoll_event){
 	    .events = epollFlags | EPOLLET,
 	    .data.u32 = eventId,
 	};
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, eventData.fd, &ev) == -1)
-		log(FATAL, "epoll_ctl: conn_sock");
+		log(LOG_FATAL, "epoll_ctl: conn_sock");
 
 	return eventId;
 }
@@ -81,7 +87,7 @@ static bool acceptClient(int socket)
 	ClientData clientData = {};
 	Handle clientId = Pool_Add(clients, &clientData);
 	if (clientId < 0)
-		log(FATAL, "Out of memory");
+		log(LOG_FATAL, "Out of memory");
 
 	// Add to epoll
 	Handle clientEvent = eventAdd(
@@ -174,11 +180,21 @@ static void processClient(ClientData *client)
 static void processEvent(struct epoll_event event)
 {
 	EventData *eventData = Pool_GetRef(evDataPool, event.data.u32);
-	if (eventData->type == ST_PASSIVE && event.events & EPOLLIN)
+	if (eventData->type == ST_PASSIVE_TCP && event.events & EPOLLIN)
 	{
 		bool newClient = acceptClient(eventData->fd);
 		// Could have more clients waiting, reschedule
 		eventData->readReady = newClient;
+	}
+	if (eventData->type == ST_PASSIVE_UDP && event.events & EPOLLIN)
+	{
+		struct sockaddr_storage clntAddr; // Client address
+		socklen_t clntAddrLen = sizeof(clntAddr);
+		static char udpBuffer[32];
+		ssize_t numBytesRcvd =
+		    recvfrom(eventData->fd, udpBuffer, sizeof(udpBuffer) - 1, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
+		udpBuffer[numBytesRcvd] = 0;
+		processCmd(udpBuffer, numBytesRcvd, eventData->fd, (struct sockaddr *)&clntAddr, clntAddrLen, serverArguments);
 	}
 	else if (eventData->type)
 	{
@@ -188,7 +204,7 @@ static void processEvent(struct epoll_event event)
 			eventData->readReady = true;
 	}
 	else
-		log(ERROR, "Unhandled event");
+		log(LOG_ERROR, "Unhandled event");
 }
 
 static void sigioHandler()
@@ -202,6 +218,9 @@ static void closeServer()
 	for (int i = 0; i < sizeof(tcpSockets) / sizeof(*tcpSockets); i++)
 		if (tcpSockets[i] > 0)
 			close(tcpSockets[i]);
+	for (int i = 0; i < sizeof(udpSockets) / sizeof(*udpSockets); i++)
+		if (udpSockets[i] > 0)
+			close(udpSockets[i]);
 
 	Pool_Dispose(evDataPool);
 	Pool_Dispose(clients);
@@ -214,15 +233,11 @@ void startServer(const char *port)
 	close(STDIN_FILENO);
 	open("/dev/null", O_WRONLY);
 
-	int count = setupTCPServerSocket(port, tcpSockets);
-	if (count <= 0)
-		log(FATAL, "Cannot open TCP socket");
-
 	// Set signal handler for SIGIO
 	struct sigaction handler = (struct sigaction){.sa_handler = sigioHandler};
 	sigfillset(&handler.sa_mask);
 	if (sigaction(SIGIO, &handler, NULL) < 0)
-		log(FATAL, "sigaction() failed for SIGIO");
+		log(LOG_FATAL, "sigaction() failed for SIGIO");
 
 	handler.sa_handler = closeServer;
 	sigaction(SIGINT, &handler, NULL);
@@ -236,18 +251,33 @@ void startServer(const char *port)
 	// Create epoll fd
 	epollfd = epoll_create1(0);
 	if (epollfd == -1)
-		log(FATAL, "Failed creating epoll handler");
+		log(LOG_FATAL, "Failed creating epoll handler");
 
 	// Create collections
 	evDataPool = Pool_Create(sizeof(EventData));
 	clients = Pool_Create(sizeof(ClientData));
 
 	// Add passive socket to epoll
+
+	int count = setupTCPServerSocket(port, tcpSockets);
+	if (count <= 0)
+		log(LOG_FATAL, "Cannot open TCP socket");
 	for (int i = 0; i < count; i++)
 		eventAdd(
 		    (EventData){
 		        .fd = tcpSockets[i],
-		        .type = ST_PASSIVE,
+		        .type = ST_PASSIVE_TCP,
+		    },
+		    EPOLLIN);
+
+	count = setupUDPServerSocket("4321", udpSockets);
+	if (count <= 0)
+		log(LOG_FATAL, "Cannot open UDP socket");
+	for (int i = 0; i < count; i++)
+		eventAdd(
+		    (EventData){
+		        .fd = udpSockets[i],
+		        .type = ST_PASSIVE_UDP,
 		    },
 		    EPOLLIN);
 }
@@ -278,7 +308,7 @@ void processingLoop()
 			if (errno == EINTR)
 				nfds = 0;
 			else
-				log(FATAL, "epoll_pwait");
+				log(LOG_FATAL, "epoll_pwait");
 		}
 
 		// Re-enable SIGIO

@@ -14,17 +14,8 @@
 #define MAXPENDING 64 // Maximum outstanding connection requests
 #define MAX_ADDR_BUFFER 128
 
-int setupTCPServerSocket(const char *service, int *fd)
+static int setupSocket(struct addrinfo addrCriteria, const char *service, int *fd)
 {
-
-	// Construct the server address structure
-	struct addrinfo addrCriteria;                   // Criteria for address match
-	memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
-	addrCriteria.ai_family = AF_UNSPEC;             // Any address family
-	addrCriteria.ai_flags = AI_PASSIVE;             // Accept on any address/port
-	addrCriteria.ai_socktype = SOCK_STREAM;         // Only stream sockets
-	addrCriteria.ai_protocol = IPPROTO_TCP;         // Only TCP protocol
-
 	struct addrinfo *servAddr;                                         // List of server addresses
 	int rtnVal = getaddrinfo(NULL, service, &addrCriteria, &servAddr); // Lista de ips del servidor en servAddr
 	if (rtnVal != 0)
@@ -71,7 +62,7 @@ int setupTCPServerSocket(const char *service, int *fd)
 			fprintf(stderr, "Unable to set process owner to us");
 
 		// Bind to ALL the address and set socket to listen
-		if (bind(servSock, addr->ai_addr, addr->ai_addrlen) < 0 || listen(servSock, MAXPENDING) < 0)
+		if (bind(servSock, addr->ai_addr, addr->ai_addrlen) < 0)
 			goto error;
 		else
 		{
@@ -96,6 +87,41 @@ int setupTCPServerSocket(const char *service, int *fd)
 	return fdCount;
 }
 
+int setupTCPServerSocket(const char *service, int *fd)
+{
+	// Construct the server address structure
+	struct addrinfo addrCriteria;                   // Criteria for address match
+	memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
+	addrCriteria.ai_family = AF_UNSPEC;             // Any address family
+	addrCriteria.ai_flags = AI_PASSIVE;             // Accept on any address/port
+	addrCriteria.ai_socktype = SOCK_STREAM;         // Only stream sockets
+	addrCriteria.ai_protocol = IPPROTO_TCP;         // Only TCP protocol
+
+	int socks[2];
+	int j = 0, count = setupSocket(addrCriteria, service, socks);
+	for (int i = 0; i < count; i++)
+	{
+		if (listen(socks[i], MAXPENDING) >= 0)
+			fd[j++] = socks[i];
+		else
+			close(socks[i]);
+	}
+	return j;
+}
+
+int setupUDPServerSocket(const char *service, int *fd)
+{
+	// Construct the server address structure
+	struct addrinfo addrCriteria;                   // Criteria for address
+	memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
+	addrCriteria.ai_family = AF_UNSPEC;             // Any address family
+	addrCriteria.ai_flags = AI_PASSIVE;             // Accept on any address/port
+	addrCriteria.ai_socktype = SOCK_DGRAM;          // Only datagram socket
+	addrCriteria.ai_protocol = IPPROTO_UDP;         // Only UDP socket
+
+	return setupSocket(addrCriteria, service, fd);
+}
+
 int acceptTCPConnection(int servSock)
 {
 
@@ -111,7 +137,7 @@ int acceptTCPConnection(int servSock)
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			return -1;
 		else
-			log(FATAL, "accept failed");
+			log(LOG_FATAL, "accept failed");
 	}
 
 	/// TODO: Set nonblocking and buffer sizes

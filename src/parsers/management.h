@@ -8,4 +8,4 @@ enum YYCONDTYPE {
 	yycdone,
 };
 
-RequestStatus lexRequest(const char *str, size_t len, const char **data);
+RequestStatus lexRequest(const char *str, size_t len, const char **data, size_t *dataLen);

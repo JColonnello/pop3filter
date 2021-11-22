@@ -1,6 +1,6 @@
 #pragma once
 
-typedef struct 
+typedef struct
 {
 	const char *logFile;
 	const struct sockaddr *listenAddr;
@@ -11,6 +11,3 @@ typedef struct
 	const char *filterCmd;
 	const char *originServer;
 } ServerArguments;
-
-extern ServerArguments serverArguments; 
-ServerArguments parseArguments(int argc, char * argv[]);

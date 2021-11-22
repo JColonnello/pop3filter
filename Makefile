@@ -33,8 +33,10 @@ rebuild-all: clean-all lexer c
 
 lexer: $(RE_GENERATED)
 
-$(BUILD_DIR)/$(TARGET): $(OBJS) utilities
-	$(CC) $(CFLAGS) -o $@ $(OBJS) utilities/obj/libutilities.a
+utilities/obj/libutilities.a: utilities
+
+$(BUILD_DIR)/$(TARGET): $(OBJS) utilities/obj/libutilities.a
+	$(CC) $(CFLAGS) -o $@ $^
 
 $(BUILD_DIR)/%.o: %.c
 	$(MKDIR_P) $(dir $@)

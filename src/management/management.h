@@ -1,5 +1,7 @@
 #ifndef MGMT_H
 #define MGMT_H
+#include "arguments/args.h"
+#include <stddef.h>
 
 typedef enum
 {
@@ -20,4 +22,6 @@ typedef enum
 	GET_MGMT_PORT
 } RequestStatus;
 
+void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *clientAddr, socklen_t clientAddrLen,
+                ServerArguments args);
 #endif

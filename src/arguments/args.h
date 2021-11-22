@@ -15,4 +15,6 @@ typedef struct
 	char *originServer;
 } ServerArguments;
 
+extern ServerArguments serverArguments;
+ServerArguments parseArguments(int argc, char *argv[]);
 #endif

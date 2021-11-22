@@ -4,6 +4,8 @@
 #include "../parsers/management.h"
 #include "../stats.h"
 #include <arpa/inet.h>
+#include <stddef.h>
+#include <stdlib.h>
 
 void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *clientAddr, socklen_t clientAddrLen,
                 ServerArguments args)
@@ -12,7 +14,10 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	char *errorFile;
 	char *proxy_addr;
 	char *data;
-	RequestStatus status = lexRequest(buffer, len, (const char **)&data); // TODO: se podria dejar en el buffer la data
+	size_t dataLen;
+	RequestStatus status =
+	    lexRequest(buffer, len, (const char **)&data, &dataLen); // TODO: se podria dejar en el buffer la data
+	data[dataLen] = 0;
 
 	switch (status)
 	{
