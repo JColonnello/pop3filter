@@ -1,6 +1,7 @@
 #include "management.h"
 #include "../arguments/args.h"
 #include "../functions.h"
+#include "../enviroment.h"
 #include "../parsers/management.h"
 #include "../stats.h"
 #include <arpa/inet.h>
@@ -21,6 +22,11 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	    lexRequest(buffer, len, (const char **)&data, &dataLen); // TODO: se podria dejar en el buffer la data
 	if (data != NULL)
 		data[dataLen] = 0;
+	/// TODO: delete this
+	char * pop3filter_version = "POP3FILTER_VERSION=0.1";
+	char* pop3_username = "POP3_USERNAME=username";
+	char* pop3_server = "POP3_SERVER=pop3.example.org.";
+	char* enviroment[]={pop3filter_version, pop3_username, pop3_server,  NULL};
 
 	switch (status)
 	{
@@ -65,7 +71,7 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	}
 	case SET_FILTER:
 		log(LOG_DEBUG, "New filter is: %s", data);
-		msgLen = set_filter(args, data, msg);
+		msgLen = set_filter(args, data, msg, enviroment );
 		break;
 	case SET_MGMT_ADDR:
 		log(LOG_DEBUG, "New management addr is: %s", data);

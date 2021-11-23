@@ -9,6 +9,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "../logger.h"
+
 #include "../functions.h"
 
 #include <arpa/inet.h>
@@ -21,6 +23,7 @@
 
 ServerArguments parseArguments(int argc, char *argv[])
 {
+	log(LOG_DEBUG, "parse arguments1");
 	ServerArguments args;
 	char msg[1024];
 	size_t msgLen;
@@ -44,6 +47,11 @@ ServerArguments parseArguments(int argc, char *argv[])
 		c = getopt(argc, argv, "hl:L:o:e:t:p:P:u:v");
 		if (c == -1)
 			break;
+		/// TODO: delete this
+		char * pop3filter_version = "POP3FILTER_VERSION=0.1";
+		char* pop3_username = "POP3_USERNAME=username";
+		char* pop3_server = "POP3_SERVER=pop3.example.org.";
+		char* enviroment[]={pop3filter_version, pop3_username, pop3_server,  NULL};
 
 		switch (c)
 		{
@@ -62,7 +70,8 @@ ServerArguments parseArguments(int argc, char *argv[])
             msgLen = set_mgmt_addr(&args, optarg, msg);
 			break;
 		case 't':
-            set_filter(&args, optarg, msg);
+			
+            set_filter(&args, optarg, msg, enviroment);
 			// TODO: crear proceso que corra el comando que esta en optarg
 			break;
 		case 'p':
@@ -85,6 +94,6 @@ ServerArguments parseArguments(int argc, char *argv[])
 			exit(1);
 		}
 	}
-
+	log(LOG_DEBUG, "parse arguments2");
 	return args;
 }
