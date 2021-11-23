@@ -36,7 +36,7 @@ lexer: $(RE_GENERATED)
 utilities/obj/libutilities.a: utilities
 
 $(BUILD_DIR)/$(TARGET): $(OBJS) utilities/obj/libutilities.a
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -lanl
 
 $(BUILD_DIR)/%.o: %.c
 	$(MKDIR_P) $(dir $@)
