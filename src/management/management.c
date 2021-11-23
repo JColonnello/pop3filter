@@ -6,13 +6,15 @@
 #include <arpa/inet.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include "logger.h"
 
+#define ERROR_MSG "Unknown cmd \n"
 void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *clientAddr, socklen_t clientAddrLen,
                 ServerArguments args)
 {
-	static char statsBuffer[256];
+	char msg[256];
+	size_t msgLen;
 	char *errorFile;
-	char *proxy_addr;
 	char *data = NULL;
 	size_t dataLen;
 	RequestStatus status =
@@ -23,59 +25,78 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	switch (status)
 	{
 	case STATS: {
-		size_t statsLen = stats(statsBuffer);
-		sendto(socket, statsBuffer, statsLen, 0, clientAddr, clientAddrLen);
+		log(LOG_DEBUG, "Getting stats");
+		msgLen = stats(msg);
+		sendto(socket, msg, msg, 0, clientAddr, clientAddrLen);
 		break;
 	}
 	case SET_ERROR_FILE:
-		set_error_file(args, data); // TODO: Obtener data
+		log(LOG_DEBUG, "New log file: %s", data);
+		msgLen = set_error_file(args, data, msg);
 		break;
 	case GET_ERROR_FILE:
-		errorFile = get_error_file(args);
+		log(LOG_DEBUG, "Log file is: %s", args.logFile);
+		msgLen = get_error_file(args, msg);
 		break;
 	case SET_PROXY_ADDR:
-		// TODO: Obtener data
-		inet_pton(AF_INET, data, &(args.listenSock.sin_addr));
+		log(LOG_DEBUG, "New proxy addr: %s", data);
+		msgLen = set_proxy_addr(args, data, msg);
 		break;
 	case GET_PROXY_ADDR:
-		proxy_addr = inet_ntoa(args.listenSock.sin_addr);
+		log(LOG_DEBUG, "Getting proxy addr");
+		msgLen = get_proxy_addr(args, msg);
 		break;
 	case SET_LISTEN_PORT:
-		// TODO: Obtener data
-		args.listenSock.sin_port = htons(atoi(data));
+		log(LOG_DEBUG, "New listen port is: %s", data);
+		msgLen = set_listen_port(args, data, msg);
 		break;
 	case GET_LISTEN_PORT: {
-		unsigned short port = args.listenSock.sin_port;
+		log(LOG_DEBUG, "Getting listen port");
+		msgLen = get_listen_port(args, msg);
 		break;
 	}
 	case SET_ORIGIN_PORT:
-		args.originPort = data;
+		log(LOG_DEBUG, "New origin port is: %s", data);
+		msgLen = set_origin_port(args, data, msg);
 		break;
 	case GET_ORIGIN_PORT: {
-		char *port = args.originPort;
+		log(LOG_DEBUG, "Getting origin port");
+		msgLen = get_origin_port(args, msg);
 		break;
 	}
 	case SET_FILTER:
-		args.filterCmd = data;
+		log(LOG_DEBUG, "New filter is: %s", data);
+		msgLen = set_filter(args, data, msg);
 		break;
 	case SET_MGMT_ADDR:
-		inet_pton(AF_INET, data, &(args.mgmtSock.sin_addr));
+		log(LOG_DEBUG, "New management addr is: %s", data);
+		msgLen = set_mgmt_addr(args, data, msg);
 		break;
 	case GET_MGMT_ADDR:
-		proxy_addr = inet_ntoa(args.listenSock.sin_addr);
+		log(LOG_DEBUG, "Getting management addr");
+		msgLen = get_mgmt_addr(args, msg);
 		break;
 	case SET_MGMT_PORT:
-		args.mgmtSock.sin_port = htons(atoi(data));
-
+		log(LOG_DEBUG, "New management port is: %s", data);
+		msgLen = set_mgmt_port(args, data, msg);
 		break;
-	case GET_MGMT_PORT: {
-		unsigned short port = args.mgmtSock.sin_port;
+/*
+	case GET_MGMT_PORT: {		//TODO: este caso no existe
+		log(LOG_DEBUG, "Getting management port");
+		msgLen = get_mgmt_port(args, msg);
 		break;
 	}
+*/
+	case ERROR:
+		log(LOG_DEBUG, "Sending error msg");
+		msgLen = set_error(msg);
+		break;
 	default:
 		// TODO: informar comando incorrecto
 		break;
 	}
+	sendto(socket, msg, msgLen, 0, clientAddr, clientAddrLen);
+
 }
 
 void receiveRequest(char *buffer, size_t len, int socket, struct sockaddr *clientAddr, socklen_t clientAddrLen,

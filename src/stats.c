@@ -6,7 +6,7 @@ struct Stats _stats;
 size_t stats(char *stats)
 {
 	return sprintf(stats,
-	               "Cantidad de conexiones: %d\r\nCantidad de conexiones concurrentes: %d\r\n Cantidad de bytes "
+	               "Cantidad de conexiones: %d\r\nCantidad de conexiones concurrentes: %d\r\nCantidad de bytes "
 	               "transferidos:%d\r\n",
 	               _stats.connections, _stats.current_connections, _stats.bytes_trans);
 }
