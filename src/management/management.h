@@ -23,5 +23,5 @@ typedef enum
 } RequestStatus;
 
 void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *clientAddr, socklen_t clientAddrLen,
-                ServerArguments args);
+                ServerArguments * args);
 #endif

@@ -1,4 +1,5 @@
 #pragma once
 
-void startServer(const char *port);
+void setup_args(int argc, char * argv[]);
+void startServer();
 void processingLoop();

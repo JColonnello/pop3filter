@@ -3,10 +3,10 @@
 
 int main(int argc, char *argv[])
 {
-	/// TODO: Parse arguments
-
+	
 	setLogLevel(LOG_DEBUG);
-	startServer("1234");
+	setup_args(argc, argv);
+	startServer();
 	processingLoop();
 
 	return 0;

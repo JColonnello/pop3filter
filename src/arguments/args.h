@@ -7,13 +7,22 @@
 typedef struct
 {
 	char *logFile;
-	struct sockaddr_in mgmtSock;
-	struct sockaddr_in listenSock;
+	char * mgmtAddr;
+	char * mgmtPort;
+	char * listenAddr;
+	char * listenPort;
 
 	char *originPort;
 	char *filterCmd;
 	char *originServer;
 } ServerArguments;
+
+
+/**
+ * Interpreta la linea de comandos (argc, argv) llenando
+ * args con defaults o la seleccion humana. Puede cortar
+ * la ejecución.
+ */
 
 extern ServerArguments serverArguments;
 ServerArguments parseArguments(int argc, char *argv[]);

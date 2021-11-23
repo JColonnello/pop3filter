@@ -11,6 +11,8 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
+#include "functions.h"
+
 #include "collections/pool.h"
 #include "collections/queue.h"
 #include "logger.h"
@@ -249,7 +251,7 @@ static void processEvent(struct epoll_event event)
 		ssize_t numBytesRcvd =
 		    recvfrom(eventData->fd, udpBuffer, sizeof(udpBuffer) - 1, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
 		udpBuffer[numBytesRcvd] = 0;
-		processCmd(udpBuffer, numBytesRcvd, eventData->fd, (struct sockaddr *)&clntAddr, clntAddrLen, serverArguments);
+		processCmd(udpBuffer, numBytesRcvd, eventData->fd, (struct sockaddr *)&clntAddr, clntAddrLen, &serverArguments);
 	}
 	else if (eventData->type == ST_SIGNAL && event.events & EPOLLIN)
 	{
@@ -272,7 +274,27 @@ static void closeServer()
 	exitProgram = true;
 }
 
-void startServer(const char *port)
+void setup_args(int argc, char * argv[]){
+ 	serverArguments = parseArguments(argc, argv);
+	
+	char msg[1024];
+	size_t msgLen;
+	msgLen = get_proxy_addr(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_mgmt_addr(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_listen_port(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_origin_port(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_mgmt_port(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	
+
+}
+
+
+void startServer()
 {
 	// Close stdio
 	close(STDIN_FILENO);
@@ -306,7 +328,7 @@ void startServer(const char *port)
 
 	// Add passive socket to epoll
 
-	int count = setupTCPServerSocket(port, tcpSockets);
+	int count = setupTCPServerSocket(serverArguments.listenPort, tcpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open TCP socket");
 	for (int i = 0; i < count; i++)
@@ -317,7 +339,7 @@ void startServer(const char *port)
 		    },
 		    EPOLLIN);
 
-	count = setupUDPServerSocket("4321", udpSockets);
+	count = setupUDPServerSocket(serverArguments.mgmtPort, udpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open UDP socket");
 	for (int i = 0; i < count; i++)
