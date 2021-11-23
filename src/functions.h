@@ -17,6 +17,7 @@ size_t get_mgmt_addr(ServerArguments args, char * msg);
 size_t set_mgmt_port(ServerArguments args, char * port, char * msg);
 size_t get_mgmt_port(ServerArguments args, char * msg);
 size_t set_error(char * msg);
+bool create_child(ServerArguments args, char * name);
 
 
 
