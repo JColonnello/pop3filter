@@ -39,7 +39,7 @@ static int setupSocket(struct addrinfo addrCriteria, const char *service, int *f
 			// Se prueba con el siguiente en la lista
 			continue; // Socket creation failed; try next address
 		}
-
+		fcntl(servSock, F_SETFD, FD_CLOEXEC);
 		int opt = 1;
 		if (setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
 		{

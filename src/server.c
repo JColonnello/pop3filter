@@ -299,7 +299,7 @@ void startServer(const char *port)
 	epollfd = epoll_create1(0);
 	if (epollfd == -1)
 		log(LOG_FATAL, "Failed creating epoll handler");
-
+	fcntl(epollfd, F_SETFD, FD_CLOEXEC);
 	// Create collections
 	evDataPool = Pool_Create(sizeof(EventData));
 	clients = Pool_Create(sizeof(ClientData));
@@ -329,6 +329,7 @@ void startServer(const char *port)
 		    EPOLLIN);
 
 	int sigfd = signalfd_setup();
+	fcntl(sigfd, F_SETFD, FD_CLOEXEC);
 	// Add signalfd to epoll
 	eventAdd(
 	    (EventData){
