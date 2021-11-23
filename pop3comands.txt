@@ -1,0 +1,10 @@
+USER    <identification>
+PASS    <password>
+STAT
+RETR
+DELE
+LIST    [msg]
+NOOP
+TOP     <messageID> <n>
+UIDL    [msg]
+QUIT

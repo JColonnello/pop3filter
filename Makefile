@@ -1,5 +1,6 @@
 SOURCE_DIR := src
 BUILD_DIR := build
+RE2C ?= : re2c
 
 TARGET := pop3filter
 
@@ -10,7 +11,7 @@ OBJS := $(C_SOURCES:%.c=$(BUILD_DIR)/%.o)
 
 DEP_FLAGS := -MMD -MP
 CFLAGS += -g -std=gnu11 -Wall -I$(SOURCE_DIR) $(DEP_FLAGS) -Iutilities/src -fsanitize=address
-REFLAGS += -f -W -i -c --no-generation-date
+REFLAGS += -W -i --no-generation-date
 
 all: lexer c
 
@@ -32,13 +33,17 @@ rebuild-all: clean-all lexer c
 
 lexer: $(RE_GENERATED)
 
-$(BUILD_DIR)/$(TARGET): $(OBJS) utilities
-	$(CC) $(CFLAGS) -o $@ $(OBJS) utilities/obj/libutilities.a
+utilities/obj/libutilities.a: utilities
+
+$(BUILD_DIR)/$(TARGET): $(OBJS) utilities/obj/libutilities.a
+	$(CC) $(CFLAGS) -o $@ $^
 
 $(BUILD_DIR)/%.o: %.c
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(SOURCE_DIR)/parsers/management.c: $(SOURCE_DIR)/parsers/management.re
+	$(RE2C) $(REFLAGS) -c -o $@ -t $*.h $<
 
 -include $(OBJS:%.o=%.d)
 
