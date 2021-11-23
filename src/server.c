@@ -10,6 +10,8 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
+#include "functions.h"
+
 #include "collections/pool.h"
 #include "collections/queue.h"
 #include "logger.h"
@@ -194,7 +196,7 @@ static void processEvent(struct epoll_event event)
 		ssize_t numBytesRcvd =
 		    recvfrom(eventData->fd, udpBuffer, sizeof(udpBuffer) - 1, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
 		udpBuffer[numBytesRcvd] = 0;
-		processCmd(udpBuffer, numBytesRcvd, eventData->fd, (struct sockaddr *)&clntAddr, clntAddrLen, serverArguments);
+		processCmd(udpBuffer, numBytesRcvd, eventData->fd, (struct sockaddr *)&clntAddr, clntAddrLen, &serverArguments);
 	}
 	else if (eventData->type)
 	{
@@ -226,6 +228,26 @@ static void closeServer()
 	Pool_Dispose(clients);
 	exit(0);
 }
+
+void setup_args(int argc, char * argv[]){
+ 	serverArguments = parseArguments(argc, argv);
+	
+	char msg[1024];
+	size_t msgLen;
+	msgLen = get_proxy_addr(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_mgmt_addr(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_listen_port(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_origin_port(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_mgmt_port(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	
+
+}
+
 
 void startServer(const char *port)
 {

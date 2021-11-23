@@ -10,7 +10,7 @@
 
 #define ERROR_MSG "Unknown cmd \n"
 void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *clientAddr, socklen_t clientAddrLen,
-                ServerArguments args)
+                ServerArguments * args)
 {
 	char msg[256];
 	size_t msgLen;
@@ -27,7 +27,6 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	case STATS: {
 		log(LOG_DEBUG, "Getting stats");
 		msgLen = stats(msg);
-		sendto(socket, msg, msg, 0, clientAddr, clientAddrLen);
 		break;
 	}
 	case SET_ERROR_FILE:
@@ -35,7 +34,7 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 		msgLen = set_error_file(args, data, msg);
 		break;
 	case GET_ERROR_FILE:
-		log(LOG_DEBUG, "Log file is: %s", args.logFile);
+		log(LOG_DEBUG, "Log file is: %s", args->logFile);
 		msgLen = get_error_file(args, msg);
 		break;
 	case SET_PROXY_ADDR:
@@ -89,7 +88,7 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 */
 	case ERROR:
 		log(LOG_DEBUG, "Sending error msg");
-		msgLen = set_error(msg);
+		msgLen = get_error(msg);
 		break;
 	default:
 		// TODO: informar comando incorrecto
@@ -100,7 +99,7 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 }
 
 void receiveRequest(char *buffer, size_t len, int socket, struct sockaddr *clientAddr, socklen_t clientAddrLen,
-                    ServerArguments args)
+                    ServerArguments * args)
 {
 	// TODO: Crear socket y recibir las request de los usuarios
 	processCmd(buffer, len, socket, clientAddr, clientAddrLen, args);
