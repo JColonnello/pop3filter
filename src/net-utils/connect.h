@@ -13,6 +13,8 @@ int startTCPConnection(const char *hostname, const char *port);
 // Cuando falla o completa libera los recursos de la tarea
 // Si completa devuelve fd
 enum ConnectionResult connectToServer(int task, int *fd);
+void free_dns();
+int resolve_dns(char *hostname, char *port, int async);
+int connectHost();
 int signalfd_setup();
 int signalfd_read(int fd);
-

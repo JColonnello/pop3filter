@@ -1,3 +1,4 @@
+#include <asm-generic/errno.h>
 #define _GNU_SOURCE
 #include "connect.h"
 #include <arpa/inet.h>
@@ -40,11 +41,6 @@ int signalfd_setup()
 
 int connectHost()
 {
-	struct sockaddr_in serv_addr;
-	uint16_t portUnit16 = (uint16_t) ~((unsigned int)atoi(host.ar_service));
-	serv_addr.sin_family = AF_UNSPEC;
-	serv_addr.sin_port = htons(portUnit16);
-
 	struct addrinfo *rp;
 	int ret;
 	int connSock = -1;
@@ -64,8 +60,8 @@ int connectHost()
 		buffer = CLIENT_WRITE_BUF;
 		setsockopt(connSock, SOL_SOCKET, SO_SNDLOWAT, &buffer, optSize);
 
-		ret = connect(connSock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-		if (ret == 0)
+		ret = connect(connSock, rp->ai_addr, sizeof(*rp->ai_addr));
+		if (ret == 0 || (ret == -1 && errno == EINPROGRESS))
 		{
 			return connSock;
 		}
@@ -78,20 +74,24 @@ int signalfd_read(int fd)
 	ssize_t s;
 	struct signalfd_siginfo fdsi;
 
-	while ((s = read(fd, &fdsi, sizeof(struct signalfd_siginfo))) > 0)
+	s = read(fd, &fdsi, sizeof(struct signalfd_siginfo));
+	if (s != sizeof(struct signalfd_siginfo))
 	{
-		if (s != sizeof(struct signalfd_siginfo))
-		{
-			printf("ERROR handling the signal");
-			return -1;
-		}
+		printf("ERROR handling the signal");
+		return -1;
 	}
 	// the result is in the host.ar_result member
 	// return connectHost(host);
 	free((char *)host.ar_name);
 	free((char *)host.ar_service);
+	free((void *)host.ar_request);
 
 	return 0;
+}
+
+void free_dns()
+{
+	freeaddrinfo(host.ar_result);
 }
 
 int resolve_dns(char *hostname, char *port, int async)
@@ -115,10 +115,17 @@ int resolve_dns(char *hostname, char *port, int async)
 	sig.sigev_signo = SIGRTMIN;
 
 	int flag = async ? GAI_NOWAIT : GAI_WAIT;
-	if (getaddrinfo_a(flag, (struct gaicb **)&host, 1, &sig) != 0)
+	struct gaicb *reqs[1] = {&host};
+	if (getaddrinfo_a(flag, reqs, 1, &sig) != 0)
 	{
 		perror("Unable to resolve address");
 		return -1;
+	}
+	if (!async)
+	{
+		free((char *)host.ar_name);
+		free((char *)host.ar_service);
+		freeaddrinfo((void *)host.ar_request);
 	}
 	return 0;
 }
