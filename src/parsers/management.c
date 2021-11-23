@@ -1095,12 +1095,19 @@ yy169:
 /* *********************************** */
 yyc_done:
 	yych = *YYCURSOR;
-	if (yych >= 0x01) goto yy172;
-	if (YYLIMIT <= YYCURSOR) goto yy174;
+	switch (yych) {
+	case '\n':	goto yy174;
+	default:
+		if (YYLIMIT <= YYCURSOR) goto yy176;
+		goto yy172;
+	}
 yy172:
 	++YYCURSOR;
 	{ return ERROR; }
 yy174:
+	++YYCURSOR;
+	{ return result; }
+yy176:
 	{ return result; }
 }
 

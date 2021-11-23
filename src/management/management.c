@@ -13,11 +13,12 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	static char statsBuffer[256];
 	char *errorFile;
 	char *proxy_addr;
-	char *data;
+	char *data = NULL;
 	size_t dataLen;
 	RequestStatus status =
 	    lexRequest(buffer, len, (const char **)&data, &dataLen); // TODO: se podria dejar en el buffer la data
-	data[dataLen] = 0;
+	if (data != NULL)
+		data[dataLen] = 0;
 
 	switch (status)
 	{

@@ -44,6 +44,7 @@ RequestStatus lexRequest(const char *str, size_t len, const char **data, size_t 
 		    <cmd> 'SET_MGMT_PORT ' @arg [^\n]* @end		=> done     { result = SET_MGMT_PORT; *data = arg; *dataLen = end - arg; continue; }
 		    <cmd> 'GET_MGMT_PORT ' 						=> done     { result = GET_MGMT_PORT; continue; }
 			<cmd,done> $											{ return result; }
+			<done> '\n'												{ return result; }
 			<cmd,done> *											{ return ERROR; }
 		*/
 		return ERROR;
