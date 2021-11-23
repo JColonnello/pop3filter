@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "logger.h"
-
+#include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -86,26 +86,41 @@ size_t set_error(char * msg){
 }
 
 bool create_child(ServerArguments args, char * name){
-	int fd1[2], fd2[2];
 	
-	pipe(fd1);
-	pipe(fd2);
-	int childpid;
-	// TODO: complete execv
-	close(fd1[0]); // pasar como argumento para que me los cierre el hijo
-	close(fd2[1]); // pasar como argumento para que me los cierre el hijo
-    childpid = execv("","");
-	if(childpid == -1){
+
+	pid_t pid;
+	int fd[2];
+	int fd2[2];
+	if(pipe(fd) == -1)
+    {
+       fprintf(stderr, "Error creating pipe\n");
+    }
+	if(pipe(fd2) == -1)
+    {
+       fprintf(stderr, "Error creating pipe\n");
+    }
+	if((pid = fork()) < 0) {
+			printf("Fork error: %s\n",strerror(errno));
+			return false;
+	} else if (pid == 0) { //Child process
+		dup2(fd[1],1); 
+		dup2(fd2[0],0); 
+		close(fd[1]);
+		close(fd[0]);
+		close(fd2[1]);
+		close(fd2[0]);
+		execle("/bin/sh", "sh", "-c", args.filterCmd, (char *) NULL);
 		return false;
+
+	} else{ //Father process
+		close(fd[1]);
+		close(fd2[0]);
 	}
-	/* Parent process closes up output side of pipe */
-	close(fd1[1]);
-	close(fd2[0]);
-	// int status;
-	// waitpid(pid, &status, 0);
 	return true;
 
 }
+
+
 
 
 
