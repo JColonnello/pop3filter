@@ -1,3 +1,5 @@
+#include "collections/queue.h"
+#include <stdbool.h>
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -9,17 +11,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/epoll.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
-#include "collections/pool.h"
-#include "collections/queue.h"
 #include "logger.h"
 #include "management/management.h"
 #include "net-utils/connect.h"
 #include "net-utils/tcpUtils.h"
 #include "net-utils/udpUtils.h"
+#include "server.h"
 
 #define hasFlag(x, f) (bool)((x) & (f))
+
+#define PENDING_QUEUE 10
 
 static int tcpSockets[2] = {-1};
 static int udpSockets[2] = {-1};
@@ -29,39 +33,6 @@ static Pool *clients;
 static volatile sig_atomic_t exitProgram = 0;
 
 ServerArguments serverArguments;
-
-typedef enum
-{
-	CS_CLIENT_SERVER = 1,
-	CS_SERVER_CLIENT = 2,
-	CS_SERVER_FILTER = 4,
-	CS_FILTER_CLIENT = 8,
-} CommSegment;
-
-typedef struct
-{
-	int id;
-	Handle clientEvent;
-	Handle serverEvent;
-	CommSegment activeSegments;
-} ClientData;
-
-typedef enum
-{
-	ST_PASSIVE_TCP,
-	ST_PASSIVE_UDP,
-	ST_CLIENT,
-	ST_SERVER,
-	ST_SIGNAL,
-} SocketType;
-
-typedef struct
-{
-	int fd;
-	Handle clientId;
-	SocketType type;
-	bool readReady, writeReady;
-} EventData;
 
 static void closeClient(ClientData *client, CommSegment level);
 
@@ -75,7 +46,7 @@ static Handle eventAdd(EventData eventData, uint32_t epollFlags)
 	    .events = epollFlags | EPOLLET,
 	    .data.u32 = eventId,
 	};
-	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, eventData.fd, &ev) == -1)
+	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, eventData.fdrw, &ev) == -1)
 		log(LOG_FATAL, "epoll_ctl: conn_sock");
 
 	return eventId;
@@ -91,6 +62,7 @@ static bool acceptClient(int socket)
 	ClientData clientData = {
 	    .serverEvent = -1,
 	    .clientEvent = -1,
+	    .filterEvent = -1,
 	};
 	Handle clientId = Pool_Add(clients, &clientData);
 	if (clientId < 0)
@@ -99,11 +71,28 @@ static bool acceptClient(int socket)
 	ClientData *ref = Pool_GetRef(clients, clientId);
 	ref->id = clientId;
 
+	// Reserve parser buffers
+	ref->responseState = (Input){0};
+	ref->requestState = (Input){0};
+	ref->responseState.bufSize = 512;
+	ref->responseState.buf = malloc(ref->responseState.bufSize + 1);
+	ref->responseState.writeBuf = malloc(ref->responseState.bufSize * 2 + 2);
+	ref->requestState.bufSize = 256;
+	ref->requestState.buf = malloc(ref->requestState.bufSize + 1);
+	ref->requestState.writeBuf = malloc(ref->requestState.bufSize * 2 + 2);
+	initState(&ref->responseState);
+	initState(&ref->requestState);
+
+	ref->commandQueue = Queue_Create(PENDING_QUEUE, sizeof(PendingRequest));
+	PendingRequest req = {.cmd = POP_INCOMPLETE};
+	ref->pending = true;
+	Queue_Enqueue(ref->commandQueue, &req);
+
 	// Add to epoll
 	Handle clientEvent = eventAdd(
 	    (EventData){
 	        .clientId = clientId,
-	        .fd = clientSocket,
+	        .fdrw = clientSocket,
 	        .type = ST_CLIENT,
 	    },
 	    EPOLLIN | EPOLLOUT);
@@ -120,7 +109,7 @@ static bool acceptClient(int socket)
 	Handle serverEvent = eventAdd(
 	    (EventData){
 	        .clientId = clientId,
-	        .fd = serverSocket,
+	        .fdrw = serverSocket,
 	        .type = ST_SERVER,
 	    },
 	    EPOLLIN | EPOLLOUT);
@@ -138,9 +127,8 @@ static void closeClient(ClientData *client, CommSegment level)
 	case CS_CLIENT_SERVER: {
 		clientEvent->readReady = false;
 		client->activeSegments &= ~CS_CLIENT_SERVER;
-		// shutdown(clientEvent->fd, SHUT_RD);
-		// if (serverEvent != NULL)
-		// shutdown(serverEvent->fd, SHUT_WR);
+		shutdown(clientEvent->fdrw, SHUT_RD);
+		shutdown(serverEvent->fdrw, SHUT_WR);
 		break;
 	}
 	case CS_SERVER_CLIENT: {
@@ -148,9 +136,8 @@ static void closeClient(ClientData *client, CommSegment level)
 		serverEvent->readReady = false;
 		serverEvent->writeReady = false;
 		client->activeSegments &= ~CS_SERVER_CLIENT;
-		// shutdown(serverEvent->fd, SHUT_RD);
-		// if (clientEvent != NULL)
-		// shutdown(clientEvent->fd, SHUT_WR);
+		shutdown(serverEvent->fdrw, SHUT_RD);
+		shutdown(clientEvent->fdrw, SHUT_WR);
 		break;
 	}
 	default:
@@ -162,74 +149,136 @@ static void closeClient(ClientData *client, CommSegment level)
 	    !hasFlag(client->activeSegments, CS_CLIENT_SERVER))
 	{
 		// Don't release EventData, handler could still be referenced
-		if (clientEvent->fd > 0)
-			close(clientEvent->fd);
-		if (serverEvent->fd > 0)
-			close(serverEvent->fd);
+		if (clientEvent->fdrw > 0)
+			close(clientEvent->fdrw);
+		if (serverEvent->fdrw > 0)
+			close(serverEvent->fdrw);
 		// epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL);
 	}
 
 	// Free client structures
 	if (!client->activeSegments)
 	{
+		free(client->requestState.buf);
+		free(client->responseState.buf);
+		free(client->requestState.writeBuf);
+		free(client->responseState.writeBuf);
+		while (Queue_Count(client->commandQueue) > 0)
+		{
+			PendingRequest req;
+			Queue_Dequeue(client->commandQueue, &req);
+			free(req.data);
+		}
+		Queue_Dispose(client->commandQueue);
 		Pool_Remove(evDataPool, client->clientEvent);
 		Pool_Remove(evDataPool, client->serverEvent);
 		Pool_Remove(clients, client->id);
 	}
 }
 
-static void processClient(ClientData *client)
+static bool processClient(ClientData *client)
 {
+	bool advanced = false;
 	EventData *clientEvent = Pool_GetRef(evDataPool, client->clientEvent);
 	EventData *serverEvent = Pool_GetRef(evDataPool, client->serverEvent);
+	EventData *filterEvent = Pool_GetRef(evDataPool, client->filterEvent);
 
 	// Waiting for connection
 	if (client->serverEvent >= 0 && !(client->activeSegments & CS_SERVER_CLIENT) && serverEvent->writeReady)
 	{
+		advanced = true;
 		int error;
 		uint size = sizeof(error);
-		getsockopt(serverEvent->fd, SOL_SOCKET, SO_ERROR, &error, &size);
+		getsockopt(serverEvent->fdrw, SOL_SOCKET, SO_ERROR, &error, &size);
 		if (error != 0)
 		{
 			closeClient(client, CS_CLIENT_SERVER);
-			return;
 		}
 		else
 			client->activeSegments |= CS_SERVER_CLIENT;
 	}
-	/// TODO: Process client -> server stream;
-	if (client->activeSegments & CS_CLIENT_SERVER && clientEvent->readReady && serverEvent->writeReady)
+	// Process server -> filter stream;
+	if (client->activeSegments & CS_SERVER_FILTER && filterEvent->writeReady && serverEvent->readReady)
 	{
-		bool exhausted;
-		// Skip
-		static char buffer[CLIENT_WRITE_BUF];
-		ssize_t skip = read(clientEvent->fd, buffer, sizeof(buffer));
+		advanced = true;
+		int copied;
+		int completed = copyMsg(&client->responseState, serverEvent->fdrw, filterEvent->fdw, &copied, false);
+		int bytes;
+		serverEvent->readReady = (ioctl(serverEvent->fdrw, FIONREAD, &bytes), bytes > 0);
+		filterEvent->writeReady = (ioctl(filterEvent->fdw, TIOCOUTQ, &bytes), bytes < CLIENT_WRITE_BUF * 2);
+
+		if (completed)
+		{
+			closeClient(client, CS_SERVER_FILTER);
+			return true;
+		}
+	}
+	// Process filter -> server stream;
+	if (client->activeSegments & CS_FILTER_CLIENT && filterEvent->readReady && clientEvent->writeReady)
+	{
+		advanced = true;
+		int copied;
+		int completed = copyMsg(&client->responseState, filterEvent->fdrw, clientEvent->fdrw, &copied, true);
+		int bytes;
+		filterEvent->readReady = (ioctl(filterEvent->fdw, FIONREAD, &bytes), bytes > 0);
+		clientEvent->writeReady = (ioctl(clientEvent->fdrw, TIOCOUTQ, &bytes), bytes < CLIENT_WRITE_BUF * 2);
+
+		if (completed)
+		{
+			closeClient(client, CS_FILTER_CLIENT);
+			return true;
+		}
+	}
+	// Process client commands
+	if (client->activeSegments & CS_CLIENT_SERVER && clientEvent->readReady &&
+	    Queue_Count(client->commandQueue) < PENDING_QUEUE)
+	{
+		advanced = true;
+		ssize_t skip = processPopClient(&client->requestState, clientEvent->fdrw, client->commandQueue);
 		if (skip <= 0)
 		{
-			// Close client
-			closeClient(client, skip < 0 ? CS_SERVER_CLIENT : CS_CLIENT_SERVER);
-			return;
+			closeClient(client, CS_CLIENT_SERVER);
 		}
-		exhausted = (skip < CLIENT_WRITE_BUF);
-		clientEvent->readReady = !exhausted;
-		int sent = write(serverEvent->fd, buffer, skip);
+		int bytes;
+		clientEvent->readReady = (ioctl(clientEvent->fdrw, FIONREAD, &bytes), bytes > 0);
 	}
+	// Read server responses
 	if (client->activeSegments & CS_SERVER_CLIENT && clientEvent->writeReady && serverEvent->readReady)
 	{
-		bool exhausted;
-		// Skip
-		static char buffer[CLIENT_WRITE_BUF];
-		ssize_t skip = read(serverEvent->fd, buffer, sizeof(buffer));
+		advanced = true;
+		bool redirect = false;
+		ssize_t count = processPopServer(client, serverEvent->fdrw, clientEvent->fdrw, &redirect);
+		if (count <= 0)
+		{
+			closeClient(client, CS_SERVER_CLIENT);
+			return true;
+		}
+		int bytes;
+		serverEvent->readReady = (ioctl(serverEvent->fdrw, FIONREAD, &bytes), bytes > 0);
+	}
+	// Send commands to server
+	if (client->activeSegments & CS_CLIENT_SERVER && !client->pending && serverEvent->writeReady &&
+	    Queue_Count(client->commandQueue) > 0)
+	{
+		advanced = true;
+		PendingRequest req;
+		Queue_Peek(client->commandQueue, &req);
+		ssize_t skip = sendPopRequest(serverEvent->fdrw, req);
 		if (skip <= 0)
 		{
-			// Close client
-			closeClient(client, CS_SERVER_CLIENT);
-			return;
+			closeClient(client, CS_CLIENT_SERVER);
+			return true;
 		}
-		exhausted = (skip < CLIENT_WRITE_BUF);
-		serverEvent->readReady = !exhausted;
-		int sent = write(clientEvent->fd, buffer, skip);
+		client->pending = true;
+		int bytes;
+		clientEvent->writeReady = (ioctl(clientEvent->fdrw, TIOCOUTQ, &bytes), bytes < CLIENT_WRITE_BUF * 2);
 	}
+	if (!(client->activeSegments & CS_CLIENT_SERVER) && Queue_Count(client->commandQueue) == 0)
+	{
+		closeClient(client, CS_SERVER_CLIENT);
+		return true;
+	}
+	return advanced;
 }
 
 static void processEvent(struct epoll_event event)
@@ -237,9 +286,7 @@ static void processEvent(struct epoll_event event)
 	EventData *eventData = Pool_GetRef(evDataPool, event.data.u32);
 	if (eventData->type == ST_PASSIVE_TCP && event.events & EPOLLIN)
 	{
-		bool newClient = acceptClient(eventData->fd);
-		// Could have more clients waiting, reschedule
-		eventData->readReady = newClient;
+		eventData->readReady = true;
 	}
 	else if (eventData->type == ST_PASSIVE_UDP && event.events & EPOLLIN)
 	{
@@ -247,14 +294,15 @@ static void processEvent(struct epoll_event event)
 		socklen_t clntAddrLen = sizeof(clntAddr);
 		static char udpBuffer[32];
 		ssize_t numBytesRcvd =
-		    recvfrom(eventData->fd, udpBuffer, sizeof(udpBuffer) - 1, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
+		    recvfrom(eventData->fdrw, udpBuffer, sizeof(udpBuffer) - 1, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
 		udpBuffer[numBytesRcvd] = 0;
-		processCmd(udpBuffer, numBytesRcvd, eventData->fd, (struct sockaddr *)&clntAddr, clntAddrLen, serverArguments);
+		processCmd(udpBuffer, numBytesRcvd, eventData->fdrw, (struct sockaddr *)&clntAddr, clntAddrLen,
+		           serverArguments);
 	}
 	else if (eventData->type == ST_SIGNAL && event.events & EPOLLIN)
 	{
 		/// TODO: signalfd manage
-		signalfd_read(eventData->fd);
+		signalfd_read(eventData->fdrw);
 	}
 	else if (eventData->type)
 	{
@@ -312,7 +360,7 @@ void startServer(const char *port)
 	for (int i = 0; i < count; i++)
 		eventAdd(
 		    (EventData){
-		        .fd = tcpSockets[i],
+		        .fdrw = tcpSockets[i],
 		        .type = ST_PASSIVE_TCP,
 		    },
 		    EPOLLIN);
@@ -323,7 +371,7 @@ void startServer(const char *port)
 	for (int i = 0; i < count; i++)
 		eventAdd(
 		    (EventData){
-		        .fd = udpSockets[i],
+		        .fdrw = udpSockets[i],
 		        .type = ST_PASSIVE_UDP,
 		    },
 		    EPOLLIN);
@@ -332,7 +380,7 @@ void startServer(const char *port)
 	// Add signalfd to epoll
 	eventAdd(
 	    (EventData){
-	        .fd = sigfd,
+	        .fdrw = sigfd,
 	        .type = ST_SIGNAL,
 	    },
 	    EPOLLIN);
@@ -346,22 +394,13 @@ void processingLoop()
 	sigset_t sigioMask;
 	sigemptyset(&sigioMask);
 	sigaddset(&sigioMask, SI_SIGIO);
+	const int max_events = 10;
+	struct epoll_event events[max_events];
+	int nfds;
+	bool advanced = false;
 	for (;;)
 	{
-		const int max_events = 10;
-		struct epoll_event events[max_events];
-
-		// Block and check for SIGIO event
-		// sigset_t oldMask;
-		// sigprocmask(SIG_BLOCK, &sigioMask, &oldMask);
-		// if (sigioPending)
-		// {
-		// 	/// TODO: Process signal
-		// 	sigioPending = false;
-		// }
-
-		// Wait for events
-		int nfds = epoll_wait(epollfd, events, max_events, -1);
+		nfds = epoll_wait(epollfd, events, max_events, advanced ? 0 : -1);
 		if (nfds == -1)
 		{
 			if (errno == EINTR)
@@ -393,10 +432,15 @@ void processingLoop()
 		for (int i = 0; i < nfds; i++)
 			processEvent(events[i]);
 
+		advanced = false;
+		for (int i = 0; i < sizeof(tcpSockets) / sizeof(*tcpSockets); i++)
+			if (tcpSockets[i] > 0)
+				advanced |= !acceptClient(tcpSockets[i]);
+
 		int clientCount = Pool_Count(clients);
 		Handle activeClients[clientCount];
 		Pool_ToIndexArray(clients, activeClients);
 		for (int i = 0; i < clientCount; i++)
-			processClient(Pool_GetRef(clients, activeClients[i]));
+			advanced |= processClient(Pool_GetRef(clients, activeClients[i]));
 	}
 }

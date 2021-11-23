@@ -45,6 +45,9 @@ $(BUILD_DIR)/%.o: %.c
 $(SOURCE_DIR)/parsers/management.c: $(SOURCE_DIR)/parsers/management.re
 	$(RE2C) $(REFLAGS) -c -o $@ -t $*.h $<
 
+$(SOURCE_DIR)/parsers/pop3.c: $(SOURCE_DIR)/parsers/pop3.re
+	$(RE2C) $(REFLAGS) -c -f -o $@ -t $*.h $<
+
 -include $(OBJS:%.o=%.d)
 
 MKDIR_P ?= mkdir -p
