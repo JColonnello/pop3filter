@@ -281,7 +281,7 @@ void startServer()
 
 	// Add passive socket to epoll
 
-	int count = setupTCPServerSocket(serverArguments.listenPort, tcpSockets);
+	int count = setupTCPServerSocket(serverArguments.listenAddr, serverArguments.listenPort, tcpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open TCP socket");
 	for (int i = 0; i < count; i++)
@@ -292,7 +292,7 @@ void startServer()
 		    },
 		    EPOLLIN);
 
-	count = setupUDPServerSocket(serverArguments.mgmtPort, udpSockets);
+	count = setupUDPServerSocket(serverArguments.mgmtAddr, serverArguments.mgmtPort, udpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open UDP socket");
 	for (int i = 0; i < count; i++)

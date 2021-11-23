@@ -63,7 +63,25 @@ size_t get_origin_port(ServerArguments * args, char * msg){
 	return sprintf(msg, "Origin port is: %s\n", args->originPort);
 }
 
+
 size_t set_filter(ServerArguments * args, char * filter, char * msg){ 
+	char * cmd = strcat(filter, " SALIDA");
+	char * argv[3];
+	argv[0] = filter;
+	argv[1] = "SALIDA";		//TODO:Habria que parsear el filtro 
+	argv[2] = NULL;
+	pid_t child;
+	pid_t c;
+	if ((child = fork()) == 0)
+	{
+		execvp(cmd, argv);
+	} else {
+		if (child == (pid_t)(-1))
+		{
+			log(LOG_FATAL, "FORK FAILED");
+		}
+		
+	}
 	args->filterCmd = filter;
 	return sprintf(msg, "Setting filter\n");
 
