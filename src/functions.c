@@ -85,6 +85,35 @@ size_t set_error(char * msg){
 	return sprintf(msg, "Unknown command\n");
 }
 
+bool create_child(ServerArguments args, char * name){
+	int fd1[2], fd2[2];
+	
+	pipe(fd1);
+	pipe(fd2);
+	int childpid;
+	// TODO: complete execv
+    childpid = execv("","");
+	if(childpid == -1)
+	{
+			perror("execv");
+			return false;
+	}
+
+	if(childpid == 0)
+	{
+			/* Child process closes up input side of pipe */
+			close(fd1[0]);
+			close(fd2[1]);
+	}
+	else
+	{
+			/* Parent process closes up output side of pipe */
+			close(fd2[1]);
+			close(fd1[0]);
+	}
+	return true;
+}
+
 
 
 
