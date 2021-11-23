@@ -5,7 +5,7 @@ int main(int argc, char *argv[])
 {
 	/// TODO: Parse arguments
 
-	setLogLevel(DEBUG);
+	setLogLevel(LOG_DEBUG);
 	startServer("1234");
 	processingLoop();
 
