@@ -85,7 +85,7 @@ size_t set_error(char * msg){
 	return sprintf(msg, "Unknown command\n");
 }
 
-bool create_child(ServerArguments args, char * name){
+bool create_child(ServerArguments args, char ** enviroment){
 	
 
 	pid_t pid;
@@ -109,7 +109,7 @@ bool create_child(ServerArguments args, char * name){
 		close(fd[0]);
 		close(fd2[1]);
 		close(fd2[0]);
-		execle("/bin/sh", "sh", "-c", args.filterCmd, (char *) NULL);
+		execle("/bin/sh", "sh", "-c", args.filterCmd, enviroment);
 		return false;
 
 	} else{ //Father process
