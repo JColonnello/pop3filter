@@ -92,23 +92,10 @@ bool create_child(ServerArguments args, char * name){
 	pipe(fd2);
 	int childpid;
 	// TODO: complete execv
+	close(fd1[0]); // pasar como argumento para que me los cierre el hijo
+	close(fd2[1]); // pasar como argumento para que me los cierre el hijo
     childpid = execv("","");
-	
-
-	pid_t pid = fork();
-	if(childpid == -1)
-	{
-		perror("execv");
-		return false;
-	}
-	if (pid == 0) {
-		/* Child process closes up input side of pipe */
-		close(fd1[0]);
-		close(fd2[1]);
-		
-		//TODO
-		execvp("", "");
-		printf("Failed to invoke /bin/sh to execute the supplied command.");
+	if(childpid == -1){
 		return false;
 	}
 	/* Parent process closes up output side of pipe */
@@ -116,7 +103,7 @@ bool create_child(ServerArguments args, char * name){
 	close(fd2[0]);
 	// int status;
 	// waitpid(pid, &status, 0);
-	return true
+	return true;
 
 }
 
