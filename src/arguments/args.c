@@ -30,8 +30,6 @@ ServerArguments parseArguments(int argc, char *argv[])
 	set_error_file(&args, "/dev/null", msg);
 	set_mgmt_addr(&args, "127.0.0.1", msg);
 	set_mgmt_port(&args, DEFAULT_MGMT_PORT, msg);
-		//  Por defecto escucha en todas las interfaces
-	//  inet_pton(AF_INET, "127.0.0.1", &(args.listenSock.sin_addr));
 	set_listen_port(&args, DEFAULT_LISTEN_PORT, msg);
 	set_origin_port(&args, DEFAULT_ORIGIN_PORT, msg);
 

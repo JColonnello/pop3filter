@@ -7,8 +7,10 @@
 typedef struct
 {
 	char *logFile;
-	struct sockaddr_in mgmtSock;
-	struct sockaddr_in listenSock;
+	char * mgmtAddr;
+	char * mgmtPort;
+	char * listenAddr;
+	char * listenPort;
 
 	char *originPort;
 	char *filterCmd;
