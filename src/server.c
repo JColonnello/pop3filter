@@ -249,7 +249,7 @@ void setup_args(int argc, char * argv[]){
 }
 
 
-void startServer(const char *port)
+void startServer()
 {
 	// Close stdio
 	close(STDIN_FILENO);
@@ -281,7 +281,7 @@ void startServer(const char *port)
 
 	// Add passive socket to epoll
 
-	int count = setupTCPServerSocket(port, tcpSockets);
+	int count = setupTCPServerSocket(serverArguments.listenPort, tcpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open TCP socket");
 	for (int i = 0; i < count; i++)
@@ -292,7 +292,7 @@ void startServer(const char *port)
 		    },
 		    EPOLLIN);
 
-	count = setupUDPServerSocket("4321", udpSockets);
+	count = setupUDPServerSocket(serverArguments.mgmtPort, udpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open UDP socket");
 	for (int i = 0; i < count; i++)

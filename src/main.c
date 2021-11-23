@@ -4,7 +4,7 @@ int main(int argc, char *argv[])
 {
 	/// TODO: Parse arguments
 	setup_args(argc, argv);
-	startServer("1234");
+	startServer();
 	processingLoop();
 
 	return 0;
