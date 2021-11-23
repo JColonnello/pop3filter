@@ -18,6 +18,7 @@
 #include "net-utils/connect.h"
 #include "net-utils/tcpUtils.h"
 #include "net-utils/udpUtils.h"
+#include "stats.h"
 
 #define hasFlag(x, f) (bool)((x) & (f))
 
@@ -84,6 +85,7 @@ static Handle eventAdd(EventData eventData, uint32_t epollFlags)
 static bool acceptClient(int socket)
 {
 	int clientSocket = acceptTCPConnection(socket);
+	addCurrentConnection();
 	// No pending connection
 	if (clientSocket < 0)
 		return true;
@@ -156,6 +158,7 @@ static void closeClient(ClientData *client, CommSegment level)
 	default:
 		break;
 	}
+	removeCurrentConnection();
 
 	// Client-server is closed both ways
 	if ((CS_CLIENT_SERVER | CS_SERVER_CLIENT) & level && !hasFlag(client->activeSegments, CS_SERVER_CLIENT) &&
@@ -249,6 +252,9 @@ static void processEvent(struct epoll_event event)
 		ssize_t numBytesRcvd =
 		    recvfrom(eventData->fd, udpBuffer, sizeof(udpBuffer) - 1, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
 		udpBuffer[numBytesRcvd] = 0;
+		
+		addBytes(numBytesRcvd);
+		
 		processCmd(udpBuffer, numBytesRcvd, eventData->fd, (struct sockaddr *)&clntAddr, clntAddrLen, serverArguments);
 	}
 	else if (eventData->type == ST_SIGNAL && event.events & EPOLLIN)

@@ -12,4 +12,5 @@ size_t stats(char *stats);
 
 void addConnection();
 void addCurrentConnection();
+void removeCurrentConnection();
 void addBytes(int bytes);

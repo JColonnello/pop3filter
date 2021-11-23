@@ -22,6 +22,10 @@ void addCurrentConnection()
 	addConnection();
 }
 
+void removeCurrentConnection(){
+	_stats.current_connections--;
+}
+
 void addBytes(int bytes)
 {
 	_stats.bytes_trans += bytes;
