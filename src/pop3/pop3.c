@@ -54,6 +54,12 @@ bool processPopClient(Input *in, int fd, Queue *queue, char **user)
 	{
 	case POP_INCOMPLETE:
 		return false;
+	case POP_INVALID: {
+		PendingRequest req = {.cmd = cmd};
+		in->tok = in->cur;
+		Queue_Enqueue(queue, &req);
+		break;
+	}
 	case POP_USER:
 		if (*user)
 			free(*user);

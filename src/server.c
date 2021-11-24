@@ -351,10 +351,12 @@ static bool processClient(ClientData *client)
 				closeClient(client, CS_SERVER_IN);
 				return true;
 			}
+			client->pending = true;
+			int bytes;
+			clientEvent->writeReady = (ioctl(clientEvent->fdrw, TIOCOUTQ, &bytes), bytes < CLIENT_WRITE_BUF * 2);
 		}
-		client->pending = true;
-		int bytes;
-		clientEvent->writeReady = (ioctl(clientEvent->fdrw, TIOCOUTQ, &bytes), bytes < CLIENT_WRITE_BUF * 2);
+		else
+			serverEvent->readReady = true;
 	}
 	if (!hasFlag(client->activeSegments, CS_CLIENT_OUT) && Queue_Count(client->commandQueue) == 0)
 	{

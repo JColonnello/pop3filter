@@ -166,8 +166,10 @@ PopCommand parsePopRequest(Input *in, char **arg, size_t *argLen, size_t *len)
         'user' [ ]+ @args arg @arge [ ]* '\r\n'         { result = POP_USER; break; }
         'retr' [ ]+ arg [ ]* '\r\n'                     { result = POP_RETR; break; }
         print+ '\r\n'                                   { result = POP_UNKNOWN; break; }
-        *                                               { end = in->cur; result = POP_INVALID; break; }
-        $                                               { end = in->cur; result = POP_INCOMPLETE; break; }
+        
+        '\r\n'                                          { result = POP_INVALID; break; }
+        *                                               { result = POP_INVALID; break; }
+        $                                               { result = POP_INCOMPLETE; break; }
     */
 	}
 
