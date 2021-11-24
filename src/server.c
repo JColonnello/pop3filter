@@ -412,13 +412,13 @@ void processingLoop()
 			log(LOG_INFO, "Closing...");
 			close(epollfd);
 			for (int i = 0; i < sizeof(tcpEvents) / sizeof(*tcpEvents); i++)
-				if (tcpEvents[i] > 0)
+				if (tcpEvents[i] >= 0)
 				{
 					EventData *ev = Pool_GetRef(evDataPool, tcpEvents[i]);
 					close(ev->fdrw);
 				}
 			for (int i = 0; i < sizeof(udpEvents) / sizeof(*udpEvents); i++)
-				if (udpEvents[i] > 0)
+				if (udpEvents[i] >= 0)
 				{
 					EventData *ev = Pool_GetRef(evDataPool, udpEvents[i]);
 					close(ev->fdrw);
@@ -439,7 +439,7 @@ void processingLoop()
 
 		advanced = false;
 		for (int i = 0; i < sizeof(tcpEvents) / sizeof(*tcpEvents); i++)
-			if (tcpEvents[i] > 0)
+			if (tcpEvents[i] >= 0)
 			{
 				EventData *ev = Pool_GetRef(evDataPool, tcpEvents[i]);
 				if (!ev->readReady)
@@ -451,7 +451,7 @@ void processingLoop()
 			}
 
 		for (int i = 0; i < sizeof(udpEvents) / sizeof(*udpEvents); i++)
-			if (udpEvents[i] > 0)
+			if (udpEvents[i] >= 0)
 			{
 				EventData *ev = Pool_GetRef(evDataPool, udpEvents[i]);
 				if (!ev->readReady)
