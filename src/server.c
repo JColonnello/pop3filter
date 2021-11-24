@@ -360,7 +360,7 @@ void startServer()
 	    },
 	    EPOLLIN);
 
-	if (resolve_dns("localhost", "2110", 0))
+	if (resolve_dns("localhost", "2110", 0))			//TODO: de donde sale ese 2110?
 		log(LOG_FATAL, "Could not resolve hostname");
 }
 
