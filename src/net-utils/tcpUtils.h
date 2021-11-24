@@ -7,7 +7,7 @@
 #define CLIENT_WRITE_BUF 1024
 
 // Create, bind, and listen a new TCP server socket
-int setupTCPServerSocket(const char *service, int *fd);
+int setupTCPServerSocket(char * host, const char *service, int *fd);
 
 // Accept a new TCP connection on a server socket
 int acceptTCPConnection(int servSock);

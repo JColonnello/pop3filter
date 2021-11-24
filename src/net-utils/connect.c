@@ -35,6 +35,7 @@ int signalfd_setup()
 	sigaddset(&mask, SIGRTMIN);
 	sigprocmask(SIG_BLOCK, &mask, NULL); // we block the signal
 	sfd = signalfd(-1, &mask, 0);
+	fcntl(sfd, F_SETFD, FD_CLOEXEC);
 	// add it to the event queue
 	return sfd;
 }
@@ -56,6 +57,7 @@ int connectHost()
 		int buffer = CLIENT_WRITE_BUF * 2;
 		size_t optSize = sizeof(buffer);
 		fcntl(connSock, F_SETFL, O_NONBLOCK);
+		fcntl(connSock, F_SETFD, FD_CLOEXEC);
 		setsockopt(connSock, SOL_SOCKET, SO_SNDBUF, &buffer, optSize);
 		buffer = CLIENT_WRITE_BUF;
 		setsockopt(connSock, SOL_SOCKET, SO_SNDLOWAT, &buffer, optSize);

@@ -16,6 +16,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "collections/pool.h"
+#include "collections/queue.h"
+#include "functions.h"
 #include "logger.h"
 #include "management/management.h"
 #include "net-utils/connect.h"
@@ -413,7 +416,25 @@ static void closeServer()
 	exitProgram = true;
 }
 
-void startServer(const char *port)
+void setup_args(int argc, char *argv[])
+{
+	serverArguments = parseArguments(argc, argv);
+
+	char msg[1024];
+	size_t msgLen;
+	msgLen = get_proxy_addr(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_mgmt_addr(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_listen_port(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_origin_port(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+	msgLen = get_mgmt_port(&serverArguments, msg);
+	log(LOG_DEBUG, "%s", msg);
+}
+
+void startServer()
 {
 	// Close stdio
 	close(STDIN_FILENO);
@@ -440,7 +461,7 @@ void startServer(const char *port)
 	epollfd = epoll_create1(0);
 	if (epollfd == -1)
 		log(LOG_FATAL, "Failed creating epoll handler");
-
+	fcntl(epollfd, F_SETFD, FD_CLOEXEC);
 	// Create collections
 	evDataPool = Pool_Create(sizeof(EventData));
 	clients = Pool_Create(sizeof(ClientData));
@@ -448,7 +469,7 @@ void startServer(const char *port)
 	// Add passive socket to epoll
 
 	int tcpSockets[2];
-	int count = setupTCPServerSocket(port, tcpSockets);
+	int count = setupTCPServerSocket(serverArguments.listenAddr, serverArguments.listenPort, tcpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open TCP socket");
 	for (int i = 0; i < count; i++)
@@ -460,7 +481,7 @@ void startServer(const char *port)
 		    EPOLLIN);
 
 	int udpSockets[2];
-	count = setupUDPServerSocket("4321", udpSockets);
+	count = setupUDPServerSocket(serverArguments.mgmtAddr, serverArguments.mgmtPort, udpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open UDP socket");
 	for (int i = 0; i < count; i++)
@@ -472,6 +493,7 @@ void startServer(const char *port)
 		    EPOLLIN);
 
 	int sigfd = signalfd_setup();
+	fcntl(sigfd, F_SETFD, FD_CLOEXEC);
 	// Add signalfd to epoll
 	eventAdd(
 	    (EventData){
@@ -565,7 +587,7 @@ void processingLoop()
 				}
 				udpBuffer[numBytesRcvd] = 0;
 				processCmd(udpBuffer, numBytesRcvd, ev->fdrw, (struct sockaddr *)&clntAddr, clntAddrLen,
-				           serverArguments);
+				           &serverArguments);
 				advanced = true;
 			}
 

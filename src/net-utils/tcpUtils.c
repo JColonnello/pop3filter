@@ -10,14 +10,15 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include "stats.h"
 
 #define MAXPENDING 64 // Maximum outstanding connection requests
 #define MAX_ADDR_BUFFER 128
 
-static int setupSocket(struct addrinfo addrCriteria, const char *service, int *fd)
+static int setupSocket(struct addrinfo addrCriteria, char * host, const char *service, int *fd)
 {
 	struct addrinfo *servAddr;                                         // List of server addresses
-	int rtnVal = getaddrinfo(NULL, service, &addrCriteria, &servAddr); // Lista de ips del servidor en servAddr
+	int rtnVal = getaddrinfo(host, service, &addrCriteria, &servAddr); // Lista de ips del servidor en servAddr
 	if (rtnVal != 0)
 	{
 		// getaddrinfo failed
@@ -39,7 +40,7 @@ static int setupSocket(struct addrinfo addrCriteria, const char *service, int *f
 			// Se prueba con el siguiente en la lista
 			continue; // Socket creation failed; try next address
 		}
-
+		fcntl(servSock, F_SETFD, FD_CLOEXEC);
 		int opt = 1;
 		if (setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
 		{
@@ -87,7 +88,7 @@ static int setupSocket(struct addrinfo addrCriteria, const char *service, int *f
 	return fdCount;
 }
 
-int setupTCPServerSocket(const char *service, int *fd)
+int setupTCPServerSocket(char * host, const char *service, int *fd)
 {
 	// Construct the server address structure
 	struct addrinfo addrCriteria;                   // Criteria for address match
@@ -98,7 +99,7 @@ int setupTCPServerSocket(const char *service, int *fd)
 	addrCriteria.ai_protocol = IPPROTO_TCP;         // Only TCP protocol
 
 	int socks[2];
-	int j = 0, count = setupSocket(addrCriteria, service, socks);
+	int j = 0, count = setupSocket(addrCriteria, host, service, socks);
 	for (int i = 0; i < count; i++)
 	{
 		if (listen(socks[i], MAXPENDING) >= 0)
@@ -109,7 +110,7 @@ int setupTCPServerSocket(const char *service, int *fd)
 	return j;
 }
 
-int setupUDPServerSocket(const char *service, int *fd)
+int setupUDPServerSocket(char * host, const char *service, int *fd)
 {
 	// Construct the server address structure
 	struct addrinfo addrCriteria;                   // Criteria for address
@@ -119,12 +120,12 @@ int setupUDPServerSocket(const char *service, int *fd)
 	addrCriteria.ai_socktype = SOCK_DGRAM;          // Only datagram socket
 	addrCriteria.ai_protocol = IPPROTO_UDP;         // Only UDP socket
 
-	return setupSocket(addrCriteria, service, fd);
+	return setupSocket(addrCriteria, host, service, fd);
 }
 
 int acceptTCPConnection(int servSock)
 {
-
+	addCurrentConnection();
 	struct sockaddr_storage clntAddr; // Client address
 	// Set length of client address structure (in-out parameter)
 	socklen_t clntAddrLen = sizeof(clntAddr);
