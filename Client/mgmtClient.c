@@ -69,6 +69,9 @@ int main (int argc, char * argv[]){
             return -1;
         }
     printf("%s\n", ans);
+    memset(message, '\0', sizeof(message));
+    memset(ans, '\0', sizeof(ans));
+
 
     }   
      

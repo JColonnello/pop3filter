@@ -13,7 +13,7 @@
 void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *clientAddr, socklen_t clientAddrLen,
                 ServerArguments * args)
 {
-	char msg[256];
+	char msg[256] = {'\0'};
 	size_t msgLen;
 	char *errorFile;
 	char *data = NULL;
@@ -72,6 +72,9 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 		args->filterCmd = data;
 		msgLen =  set_filter(args,  username, fd);
 		break;
+	//No tendria mucho sentido cambiar estos parametros si hay un cliente conectado
+	//en el socket de mgmt
+	/*	
 	case SET_MGMT_ADDR:
 		log(LOG_DEBUG, "New management addr is: %s", data);
 		msgLen = set_mgmt_addr(args, data, msg);
@@ -84,7 +87,6 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 		log(LOG_DEBUG, "New management port is: %s", data);
 		msgLen = set_mgmt_port(args, data, msg);
 		break;
-/*
 	case GET_MGMT_PORT: {		//TODO: este caso no existe
 		log(LOG_DEBUG, "Getting management port");
 		msgLen = get_mgmt_port(args, msg);
@@ -107,7 +109,7 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	} 
 	log(LOG_DEBUG, "Counting bytes");
 	addBytes(nbs);
-	memset(msg, '\0', msgLen);
+	memset(msg, '\0', sizeof(msg));
 	msgLen = 0;
 
 }
