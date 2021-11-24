@@ -5,6 +5,7 @@
 #include "../parsers/management.h"
 #include "../stats.h"
 #include "logger.h"
+#include "net-utils/connect.h"
 #include <arpa/inet.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -32,6 +33,11 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	}
 	case SET_ORIGIN_ADDR:
 		msgLen = set_origin_addr(args, data, msg);
+		resolve_dns(args->originServer, args->originPort, 1);
+		break;
+	case SET_ORIGIN_PORT:
+		msgLen = set_origin_port(args, data, msg);
+		resolve_dns(args->originServer, args->originPort, 1);
 		break;
 	case GET_ERROR_FILE:
 		log(LOG_DEBUG, "Log file is: %s", args->logFile);

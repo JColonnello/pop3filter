@@ -11,7 +11,7 @@ size_t stats(char *stats)
 	               _stats.connections, _stats.current_connections, _stats.bytes_trans);
 }
 
-void addConnection()
+static void addConnection()
 {
 	_stats.connections++;
 }
@@ -20,6 +20,11 @@ void addCurrentConnection()
 {
 	_stats.current_connections++;
 	addConnection();
+}
+
+void removeCurrentConnection()
+{
+	_stats.current_connections--;
 }
 
 void addBytes(int bytes)

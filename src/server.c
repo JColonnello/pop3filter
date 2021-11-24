@@ -25,6 +25,7 @@
 #include "net-utils/tcpUtils.h"
 #include "net-utils/udpUtils.h"
 #include "server.h"
+#include "stats.h"
 
 #define hasFlag(x, f) (bool)((x) & (f))
 #define checkEOF(count) (count == 0 || (count < 0 && errno != EAGAIN))
@@ -143,6 +144,7 @@ static bool acceptClient(int socket)
 	    },
 	    EPOLLIN | EPOLLOUT);
 	ref->serverEvent = serverEvent;
+	addCurrentConnection();
 
 	return false;
 }
@@ -220,6 +222,7 @@ static void closeClient(ClientData *client, CommSegment level)
 	// Free client structures
 	if (!client->activeSegments)
 	{
+		removeCurrentConnection();
 		free(client->requestState.buf);
 		free(client->responseState.buf);
 		free(client->filterState.buf);
@@ -269,7 +272,9 @@ static bool processClient(ClientData *client)
 		if (filterEvent->writeReady && serverEvent->readReady)
 		{
 			advanced = true;
-			fillBuffer(&client->responseState, serverEvent->fdrw);
+			ssize_t read = fillBuffer(&client->responseState, serverEvent->fdrw);
+			if (read >= 0)
+				addBytes(read);
 			bool completed = copyMsg(&client->responseState, filterEvent->fdw, false);
 			int bytes;
 			serverEvent->readReady = (ioctl(serverEvent->fdrw, FIONREAD, &bytes), bytes > 0);
@@ -289,6 +294,8 @@ static bool processClient(ClientData *client)
 		advanced = true;
 		bool redirect = false;
 		ssize_t count = fillBuffer(&client->responseState, serverEvent->fdrw);
+		if (count >= 0)
+			addBytes(count);
 		int completed = processPopServer(client, clientEvent->fdrw, &redirect);
 		if (completed < 0)
 		{
@@ -331,6 +338,8 @@ static bool processClient(ClientData *client)
 	{
 		advanced = true;
 		ssize_t copied = fillBuffer(&client->filterState, filterEvent->fdrw);
+		if (copied >= 0)
+			addBytes(copied);
 		bool completed = copyMsg(&client->filterState, clientEvent->fdrw, true);
 		int bytes;
 		filterEvent->readReady = copied > 0;
@@ -348,6 +357,8 @@ static bool processClient(ClientData *client)
 	{
 		advanced = true;
 		ssize_t count = fillBuffer(&client->requestState, clientEvent->fdrw);
+		if (count >= 0)
+			addBytes(count);
 		bool complete = processPopClient(&client->requestState, clientEvent->fdrw, client->commandQueue, &client->user);
 		if (checkEOF(count) && !complete)
 		{
@@ -367,6 +378,8 @@ static bool processClient(ClientData *client)
 		if (req.cmd != POP_INVALID)
 		{
 			ssize_t count = sendPopRequest(serverEvent->fdrw, req);
+			if (count >= 0)
+				addBytes(count);
 			if (checkEOF(count))
 			{
 				closeClient(client, CS_SERVER_IN);

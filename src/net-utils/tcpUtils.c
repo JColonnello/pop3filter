@@ -1,5 +1,6 @@
 #include "tcpUtils.h"
 #include "logger.h"
+#include "stats.h"
 #include <arpa/inet.h>
 #include <asm-generic/errno.h>
 #include <asm-generic/socket.h>
@@ -10,12 +11,11 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include "stats.h"
 
 #define MAXPENDING 64 // Maximum outstanding connection requests
 #define MAX_ADDR_BUFFER 128
 
-static int setupSocket(struct addrinfo addrCriteria, char * host, const char *service, int *fd)
+static int setupSocket(struct addrinfo addrCriteria, char *host, const char *service, int *fd)
 {
 	struct addrinfo *servAddr;                                         // List of server addresses
 	int rtnVal = getaddrinfo(host, service, &addrCriteria, &servAddr); // Lista de ips del servidor en servAddr
@@ -88,7 +88,7 @@ static int setupSocket(struct addrinfo addrCriteria, char * host, const char *se
 	return fdCount;
 }
 
-int setupTCPServerSocket(char * host, const char *service, int *fd)
+int setupTCPServerSocket(char *host, const char *service, int *fd)
 {
 	// Construct the server address structure
 	struct addrinfo addrCriteria;                   // Criteria for address match
@@ -110,7 +110,7 @@ int setupTCPServerSocket(char * host, const char *service, int *fd)
 	return j;
 }
 
-int setupUDPServerSocket(char * host, const char *service, int *fd)
+int setupUDPServerSocket(char *host, const char *service, int *fd)
 {
 	// Construct the server address structure
 	struct addrinfo addrCriteria;                   // Criteria for address
@@ -125,7 +125,6 @@ int setupUDPServerSocket(char * host, const char *service, int *fd)
 
 int acceptTCPConnection(int servSock)
 {
-	addCurrentConnection();
 	struct sockaddr_storage clntAddr; // Client address
 	// Set length of client address structure (in-out parameter)
 	socklen_t clntAddrLen = sizeof(clntAddr);
