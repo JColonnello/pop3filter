@@ -47,11 +47,11 @@ bool destuffMail(Input *in)
         re2c:define:YYFILL     = "{ if(in->cond == yycline) { COPY; in->tok = in->mar = in->cur; } return false; }";
 
         <begin> '..'        => line     { in->writeBuf[in->written++] = '.'; continue; }
-        <begin> '.' '\r\n'              { result = true; break; }
+        <begin> '.\r\n'                 { result = true; break; }
         <begin> *           => line     { COPY; continue; }
-        <line> '\r\n'       => begin    { in->writeBuf[in->written++] = '\r'; in->writeBuf[in->written++] = '\n'; continue; }
+        <begin,line> '\r\n' => begin    { COPY; continue; }
         <line> [^\r\n]+                 { COPY; continue; }
-        <line> [\r\n]                   { in->writeBuf[in->written++] = *in->cur; continue; }
+        <line> [\r\n]                   { COPY; continue; }
         <begin,line> $                  { result = true; break; }
     */
 	}
@@ -84,10 +84,10 @@ bool stuffMail(Input *in)
 
         <begin> '.'         => line     { in->writeBuf[in->written++] = '.'; in->writeBuf[in->written++] = '.'; continue; }
         <begin> *           => line     { COPY; continue; }
-        <line> '\r\n'       => begin    { in->writeBuf[in->written++] = '\r'; in->writeBuf[in->written++] = '\n'; continue; }
+        <begin,line> '\r\n' => begin    { COPY; continue; }
         <line> [^\r\n]+                 { COPY; continue; }
-        <line> [\r\n]                   { in->writeBuf[in->written++] = *in->cur; continue; }
-        <begin,line> $                  { char str[] = "\r\n.\r\n"; memcpy(&in->writeBuf[in->written], str, sizeof(str) - 1); in->written += sizeof(str) - 1; result = true; break; }
+        <line> [\r\n]                   { COPY; continue; }
+        <begin,line> $                  { char str[] = ".\r\n"; memcpy(&in->writeBuf[in->written], str, sizeof(str) - 1); in->written += sizeof(str) - 1; result = true; break; }
     */
 	}
 
@@ -126,14 +126,13 @@ bool parsePopResponse(Input *in, bool multiline)
         <extra> '\r\n.\r\n'                         { COPY; result = true; break; }
         <extra> [^\r\n]+                            { COPY; continue; }
         <status,msg,extra> $                        { result = true; break; }
-        <status,msg,extra> *                        { char str[] = "-ERR Invalid response from origin"; memcpy(&in->writeBuf[in->written], str, sizeof(str) - 1); in->written += sizeof(str) - 1; result = true; break; }
+        <status,msg,extra> *                        { char str[] = "-ERR Invalid response from origin\r\n"; memcpy(&in->writeBuf[in->written], str, sizeof(str) - 1); in->written += sizeof(str) - 1; result = true; break; }
     */
 	}
 
 	in->tok = in->mar = in->cur;
 	in->state = -1;
-	if (result)
-		in->cond = yycstatus;
+	in->cond = yycstatus;
 	return result;
 }
 
@@ -161,13 +160,18 @@ PopCommand parsePopRequest(Input *in, char **arg, size_t *argLen, size_t *len)
         re2c:define:YYSETCONDITION = "in->cond = @@;";
         re2c:define:YYFILL     = "{ return POP_INCOMPLETE; }";
 
-        'user' [ ]+ @args [^ ] @arge [ ]* '\r\n' @end   { result = POP_USER; break; }
-        [^\r\n]* '\r\n' @end                            { result = POP_UNKNOWN; break; }
+        print = [\x20-\x7f];
+        arg = (print\[ ])+;
+
+        'user' [ ]+ @args arg @arge [ ]* '\r\n'         { result = POP_USER; break; }
+        'retr' [ ]+ arg [ ]* '\r\n'                     { result = POP_RETR; break; }
+        print+ '\r\n'                                   { result = POP_UNKNOWN; break; }
         *                                               { end = in->cur; result = POP_INVALID; break; }
         $                                               { end = in->cur; result = POP_INCOMPLETE; break; }
     */
 	}
 
+	end = in->cur;
 	*arg = args;
 	*argLen = arge - args;
 	*len = end - in->tok;

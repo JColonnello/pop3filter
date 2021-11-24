@@ -19,6 +19,7 @@ typedef enum
 	POP_INCOMPLETE,
 	POP_UNKNOWN,
 	POP_USER,
+	POP_RETR,
 } PopCommand;
 
 typedef struct
@@ -30,8 +31,9 @@ typedef struct
 
 #include <server.h>
 
-bool copyMsg(Input *in, int from, int to, int *count, bool stuff);
-ssize_t processPopClient(Input *in, int fd, Queue *queue, char **user);
+bool copyMsg(Input *in, int to, bool stuff);
+bool processPopClient(Input *in, int fd, Queue *queue, char **user);
 ssize_t sendPopRequest(int fd, PendingRequest request);
-ssize_t processPopServer(ClientData *client, int serverfd, int clientfd, bool *redirect);
+bool processPopServer(ClientData *client, int clientfd, bool *redirect);
 void initState(Input *in);
+ssize_t fillBuffer(Input *in, int fd);

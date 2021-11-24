@@ -7,10 +7,15 @@ typedef struct ClientData ClientData;
 
 typedef enum
 {
-	CS_CLIENT_SERVER = 1,
-	CS_SERVER_CLIENT = 2,
-	CS_SERVER_FILTER = 4,
-	CS_FILTER_CLIENT = 8,
+	CS_CLIENT_OUT = 0x1,
+	CS_CLIENT_IN = 0x2,
+	CS_CLIENT = CS_CLIENT_IN | CS_CLIENT_OUT,
+	CS_SERVER_OUT = 0x4,
+	CS_SERVER_IN = 0x8,
+	CS_SERVER = CS_SERVER_IN | CS_SERVER_OUT,
+	CS_FILTER_OUT = 0x10,
+	CS_FILTER_IN = 0x20,
+	CS_FILTER = CS_FILTER_IN | CS_FILTER_OUT,
 } CommSegment;
 
 struct ClientData
@@ -22,6 +27,7 @@ struct ClientData
 	CommSegment activeSegments;
 	Input responseState;
 	Input requestState;
+	Input filterState;
 	Queue *commandQueue;
 	bool pending;
 	char *user;

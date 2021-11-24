@@ -3,6 +3,7 @@
 #include "net-utils/tcpUtils.h"
 #include "parsers/pop3.h"
 #include "server.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,7 +17,7 @@ void initState(Input *in)
 	*in->lim = 0;
 }
 
-static ssize_t fill(Input *in, int fd)
+ssize_t fillBuffer(Input *in, int fd)
 {
 	const char *start = in->tok;
 	const size_t shift = start - in->buf;
@@ -29,32 +30,34 @@ static ssize_t fill(Input *in, int fd)
 	in->tok -= shift;
 
 	const ssize_t count = read(fd, in->lim, free);
-	in->lim += count;
+	if (count >= 0)
+		in->lim += count;
 	*in->lim = 0;
 
 	return count;
 }
 
-bool copyMsg(Input *in, int from, int to, int *count, bool stuff)
+bool copyMsg(Input *in, int to, bool stuff)
 {
-	*count = fill(in, from);
 	bool result = stuff ? stuffMail(in) : destuffMail(in);
 	write(to, in->writeBuf, in->written);
+	in->written = 0;
 	return result;
 }
 
-ssize_t processPopClient(Input *in, int fd, Queue *queue, char **user)
+bool processPopClient(Input *in, int fd, Queue *queue, char **user)
 {
-	ssize_t count = fill(in, fd);
 	char *arg;
 	size_t argLen, len;
 	PopCommand cmd = parsePopRequest(in, &arg, &argLen, &len);
 	switch (cmd)
 	{
 	case POP_INCOMPLETE:
-		break;
+		return false;
 	case POP_USER:
-		*user = malloc(argLen+1);
+		if (*user)
+			free(*user);
+		*user = malloc(argLen + 1);
 		memcpy(*user, arg, argLen);
 		(*user)[argLen] = 0;
 	default: {
@@ -66,10 +69,11 @@ ssize_t processPopClient(Input *in, int fd, Queue *queue, char **user)
 		    .data = data,
 		    .len = len,
 		};
+		in->tok = in->cur;
 		Queue_Enqueue(queue, &req);
 	}
 	}
-	return count;
+	return true;
 }
 
 ssize_t sendPopRequest(int fd, PendingRequest request)
@@ -79,36 +83,39 @@ ssize_t sendPopRequest(int fd, PendingRequest request)
 	return count;
 }
 
-ssize_t processPopServer(ClientData *client, int serverfd, int clientfd, bool *redirect)
+bool processPopServer(ClientData *client, int clientfd, bool *redirect)
 {
 	Input *in = &client->responseState;
 	Queue *queue = client->commandQueue;
-	ssize_t count = fill(in, serverfd);
 	PendingRequest req;
-	Queue_Peek(queue, &req);
+	bool multiline = false;
+	if (!Queue_Peek(queue, &req))
+		return false;
 	switch (req.cmd)
 	{
-	case POP_UNKNOWN:
 	case POP_INVALID: {
-		char msg[] = "-ERR Invalid command";
+		char msg[] = "-ERR Invalid command\r\n";
 		write(clientfd, msg, sizeof(msg));
 		Queue_Dequeue(queue, NULL);
+		return true;
+	}
+	case POP_RETR:
+		*redirect = true;
+	case POP_UNKNOWN:
+	case POP_INCOMPLETE:
+	case POP_USER:
+		multiline = false;
 		break;
 	}
-	case POP_INCOMPLETE:
-	case POP_USER: {
-		bool completed = parsePopResponse(in, false);
-		if (completed)
-		{
-			write(clientfd, in->writeBuf, in->written);
-			in->written = 0;
-			Queue_Dequeue(queue, NULL);
-			client->pending = false;
-			break;
-		}
-		else
-			return count;
+	bool completed = parsePopResponse(in, multiline);
+	if (completed)
+	{
+		write(clientfd, in->writeBuf, in->written);
+		in->written = 0;
+		Queue_Dequeue(queue, NULL);
+		client->pending = false;
+		return true;
 	}
-	}
-	return count;
+	else
+		return false;
 }
