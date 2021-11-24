@@ -11,7 +11,8 @@ typedef struct
 	char * mgmtPort;
 	char * listenAddr;
 	char * listenPort;
-
+	int dns_timer;
+	char *originAddr;
 	char *originPort;
 	char *filterCmd;
 	char *originServer;
