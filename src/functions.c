@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include "enviroment.h"
 
 
 // con fprintf(stderr, "ERROR MESSAGE"); escribo el file
@@ -91,11 +92,22 @@ size_t get_error(char * msg){
 	return sprintf(msg, "Unknown command\n");
 }
 
-size_t set_filter(ServerArguments * args, char * filter, char * msg, char** enviroment){
-	args->filterCmd = filter;
+int set_filter(ServerArguments * args, char* username,int* fd1){
 	pid_t pid;
 	int fd[2];
 	int fd2[2];
+	FILE file;
+	char  pop3filter_version[19 + sizeof(POP3_VERSION) +1] = "POP3FILTER_VERSION=";
+	strcat(pop3filter_version,POP3_VERSION);
+	
+	char pop3_username[14 + sizeof(username)+1] = "POP3_USERNAME=";
+	strcat(pop3_username,username);
+	
+	char pop3_server[12 + sizeof(POP3_SERVER)+1] = "POP3_SERVER=";
+	strcat(pop3_server,POP3_SERVER);
+
+	char* enviroment[]={pop3filter_version, pop3_username, pop3_server,  NULL};
+	//todo open file in args para meter los errores. errno
 	if(pipe(fd) == -1)
     {
 		log(LOG_DEBUG, "Error creating pipe\n");
@@ -108,7 +120,9 @@ size_t set_filter(ServerArguments * args, char * filter, char * msg, char** envi
     }
 	if((pid = fork()) < 0) {
 		log(LOG_DEBUG, "set filter 1");
-		return sprintf(msg, "Fork error: %d\n",strerror(errno));
+		//return sprintf(msg, "Fork error: %d\n",strerror(errno));
+		//redirigir
+		return -1;
 	} else if (pid == 0) { //Child process
 		dup2(fd[1],1); 
 		dup2(fd2[0],0); 
@@ -116,21 +130,26 @@ size_t set_filter(ServerArguments * args, char * filter, char * msg, char** envi
 		close(fd[0]);
 		close(fd2[1]);
 		close(fd2[0]);
+		freopen(args->logFile, "r+", stderr); 
 		int ret = execle("/bin/sh", "sh", "-c", args->filterCmd, NULL,  enviroment);
+		
 		if(ret == -1){
 			log(LOG_DEBUG, "set filter 2");
 			
 			perror(errno);
-			return sprintf(msg, "execle() failed%d\n",strerror(errno));
+			//return sprintf(msg, "execle() failed%d\n",strerror(errno));
+			return -1;
 		}
 		
 
 	} else{ //Father process
+		fd1[0] = fd[0];
+		fd1[1] = fd2[1];
 		close(fd[1]);
 		close(fd2[0]);
 	}
 	log(LOG_DEBUG, "set filter 3");
-	return sprintf(msg, "Setting filter\n");
+	return -1;
 
 }
 

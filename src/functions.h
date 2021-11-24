@@ -12,7 +12,7 @@ size_t set_listen_port(ServerArguments * args, char * port, char * msg);
 size_t get_listen_port(ServerArguments * args, char * msg);
 size_t set_origin_port(ServerArguments * args, char * port, char * msg);
 size_t get_origin_port(ServerArguments * args, char * msg);
-size_t set_filter(ServerArguments * args, char * filter, char * msg, char** enviroment);
+int set_filter(ServerArguments * args, char* username,int* fd1);
 size_t set_mgmt_addr(ServerArguments * args, char * addr, char * msg);
 size_t get_mgmt_addr(ServerArguments * args, char * msg);
 size_t set_mgmt_port(ServerArguments * args, char * port, char * msg);

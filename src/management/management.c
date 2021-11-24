@@ -23,10 +23,8 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	if (data != NULL)
 		data[dataLen] = 0;
 	/// TODO: delete this
-	char * pop3filter_version = "POP3FILTER_VERSION=0.1";
-	char* pop3_username = "POP3_USERNAME=username";
-	char* pop3_server = "POP3_SERVER=pop3.example.org.";
-	char* enviroment[]={pop3filter_version, pop3_username, pop3_server,  NULL};
+	int fd[2];
+	char* username = "username";
 
 	switch (status)
 	{
@@ -71,7 +69,8 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	}
 	case SET_FILTER:
 		log(LOG_DEBUG, "New filter is: %s", data);
-		msgLen = set_filter(args, data, msg, enviroment );
+		args->filterCmd = data;
+		msgLen =  set_filter(args,  username, fd);
 		break;
 	case SET_MGMT_ADDR:
 		log(LOG_DEBUG, "New management addr is: %s", data);

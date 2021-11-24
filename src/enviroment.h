@@ -1,8 +1,9 @@
 #ifndef ENVIROMENT_H
 #define ENVIROMENT_H
+#include <string.h>
 
-char* POP3_VERSION  = "1.0";
-char * POP3_USERNAME;
+#define POP3_VERSION "1.0"
+#define POP3_SERVER "localhost"
 
 
 
