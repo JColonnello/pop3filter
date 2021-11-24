@@ -3,6 +3,7 @@ BUILD_DIR := build
 RE2C ?= : re2c
 
 TARGET := pop3filter
+CLIENT := client
 
 RE_SOURCES := $(shell find $(SOURCE_DIR)/ -type f -name "*.re")
 C_SOURCES := $(shell find $(SOURCE_DIR)/ -type f -name "*.c") $(RE_SOURCES:%.re=%.c)
@@ -13,7 +14,7 @@ DEP_FLAGS := -MMD -MP
 CFLAGS += -g -std=gnu11 -Wall -I$(SOURCE_DIR) $(DEP_FLAGS) -Iutilities/src -fsanitize=address
 REFLAGS += -W -i --no-generation-date
 
-all: lexer c
+all: lexer c client
 
 c: $(BUILD_DIR)/$(TARGET) utilities
 
@@ -27,6 +28,8 @@ clean:
 clean-all: clean
 	rm -f $(RE_GENERATED)
 
+client: $(BUILD_DIR)/$(CLIENT)
+
 rebuild: clean c
 
 rebuild-all: clean-all lexer c
@@ -37,6 +40,9 @@ utilities/obj/libutilities.a: utilities
 
 $(BUILD_DIR)/$(TARGET): $(OBJS) utilities/obj/libutilities.a
 	$(CC) $(CFLAGS) -o $@ $^ -lanl
+
+$(BUILD_DIR)/$(CLIENT): Client/mgmtClient.c
+	$(CC) $(CFLAGS) -o $@ $^
 
 $(BUILD_DIR)/%.o: %.c
 	$(MKDIR_P) $(dir $@)
@@ -52,4 +58,4 @@ $(SOURCE_DIR)/parsers/pop3.c: $(SOURCE_DIR)/parsers/pop3.re
 
 MKDIR_P ?= mkdir -p
 
-.PHONY: all clean rebuild c lexer clean-all rebuild-all utilities
+.PHONY: all clean rebuild c lexer clean-all rebuild-all utilities client
