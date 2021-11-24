@@ -107,6 +107,8 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	} 
 	log(LOG_DEBUG, "Counting bytes");
 	addBytes(nbs);
+	memset(msg, '\0', msgLen);
+	msgLen = 0;
 
 }
 /*

@@ -68,13 +68,14 @@ int main (int argc, char * argv[]){
             printf("Error while receiving server's msg\n");
             return -1;
         }
+    printf("%s\n", ans);
+
     }   
      
    /*fgets(message, sizeof(message), stdin);
    sendto(sockfd, message, strlen(message), 0, (struct sockaddr *) &servaddr, sizeof(servaddr));
     */
 
-    printf("Server's response: %s\n", ans);
    
     
     return 0;
