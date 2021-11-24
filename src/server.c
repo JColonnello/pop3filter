@@ -1,4 +1,6 @@
+#include "collections/pool.h"
 #include "collections/queue.h"
+#include <errno.h>
 #include <stdbool.h>
 #define _GNU_SOURCE
 #include <stdlib.h>
@@ -25,8 +27,8 @@
 
 #define PENDING_QUEUE 10
 
-static int tcpSockets[2] = {-1};
-static int udpSockets[2] = {-1};
+static Handle tcpEvents[2] = {-1};
+static Handle udpEvents[2] = {-1};
 static int epollfd;
 static Pool *evDataPool;
 static Pool *clients;
@@ -163,6 +165,8 @@ static void closeClient(ClientData *client, CommSegment level)
 		free(client->responseState.buf);
 		free(client->requestState.writeBuf);
 		free(client->responseState.writeBuf);
+		if (client->user)
+			free(client->user);
 		while (Queue_Count(client->commandQueue) > 0)
 		{
 			PendingRequest req;
@@ -234,7 +238,7 @@ static bool processClient(ClientData *client)
 	    Queue_Count(client->commandQueue) < PENDING_QUEUE)
 	{
 		advanced = true;
-		ssize_t skip = processPopClient(&client->requestState, clientEvent->fdrw, client->commandQueue);
+		ssize_t skip = processPopClient(&client->requestState, clientEvent->fdrw, client->commandQueue, &client->user);
 		if (skip <= 0)
 		{
 			closeClient(client, CS_CLIENT_SERVER);
@@ -290,14 +294,7 @@ static void processEvent(struct epoll_event event)
 	}
 	else if (eventData->type == ST_PASSIVE_UDP && event.events & EPOLLIN)
 	{
-		struct sockaddr_storage clntAddr; // Client address
-		socklen_t clntAddrLen = sizeof(clntAddr);
-		static char udpBuffer[32];
-		ssize_t numBytesRcvd =
-		    recvfrom(eventData->fdrw, udpBuffer, sizeof(udpBuffer) - 1, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
-		udpBuffer[numBytesRcvd] = 0;
-		processCmd(udpBuffer, numBytesRcvd, eventData->fdrw, (struct sockaddr *)&clntAddr, clntAddrLen,
-		           serverArguments);
+		eventData->readReady = true;
 	}
 	else if (eventData->type == ST_SIGNAL && event.events & EPOLLIN)
 	{
@@ -354,22 +351,24 @@ void startServer(const char *port)
 
 	// Add passive socket to epoll
 
+	int tcpSockets[2];
 	int count = setupTCPServerSocket(port, tcpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open TCP socket");
 	for (int i = 0; i < count; i++)
-		eventAdd(
+		tcpEvents[i] = eventAdd(
 		    (EventData){
 		        .fdrw = tcpSockets[i],
 		        .type = ST_PASSIVE_TCP,
 		    },
 		    EPOLLIN);
 
+	int udpSockets[2];
 	count = setupUDPServerSocket("4321", udpSockets);
 	if (count <= 0)
 		log(LOG_FATAL, "Cannot open UDP socket");
 	for (int i = 0; i < count; i++)
-		eventAdd(
+		udpEvents[i] = eventAdd(
 		    (EventData){
 		        .fdrw = udpSockets[i],
 		        .type = ST_PASSIVE_UDP,
@@ -412,12 +411,18 @@ void processingLoop()
 		{
 			log(LOG_INFO, "Closing...");
 			close(epollfd);
-			for (int i = 0; i < sizeof(tcpSockets) / sizeof(*tcpSockets); i++)
-				if (tcpSockets[i] > 0)
-					close(tcpSockets[i]);
-			for (int i = 0; i < sizeof(udpSockets) / sizeof(*udpSockets); i++)
-				if (udpSockets[i] > 0)
-					close(udpSockets[i]);
+			for (int i = 0; i < sizeof(tcpEvents) / sizeof(*tcpEvents); i++)
+				if (tcpEvents[i] > 0)
+				{
+					EventData *ev = Pool_GetRef(evDataPool, tcpEvents[i]);
+					close(ev->fdrw);
+				}
+			for (int i = 0; i < sizeof(udpEvents) / sizeof(*udpEvents); i++)
+				if (udpEvents[i] > 0)
+				{
+					EventData *ev = Pool_GetRef(evDataPool, udpEvents[i]);
+					close(ev->fdrw);
+				}
 
 			free_dns();
 
@@ -433,9 +438,40 @@ void processingLoop()
 			processEvent(events[i]);
 
 		advanced = false;
-		for (int i = 0; i < sizeof(tcpSockets) / sizeof(*tcpSockets); i++)
-			if (tcpSockets[i] > 0)
-				advanced |= !acceptClient(tcpSockets[i]);
+		for (int i = 0; i < sizeof(tcpEvents) / sizeof(*tcpEvents); i++)
+			if (tcpEvents[i] > 0)
+			{
+				EventData *ev = Pool_GetRef(evDataPool, tcpEvents[i]);
+				if (!ev->readReady)
+					continue;
+
+				bool pending = !acceptClient(ev->fdrw);
+				ev->readReady = pending;
+				advanced |= pending;
+			}
+
+		for (int i = 0; i < sizeof(udpEvents) / sizeof(*udpEvents); i++)
+			if (udpEvents[i] > 0)
+			{
+				EventData *ev = Pool_GetRef(evDataPool, udpEvents[i]);
+				if (!ev->readReady)
+					continue;
+
+				struct sockaddr_storage clntAddr; // Client address
+				socklen_t clntAddrLen = sizeof(clntAddr);
+				static char udpBuffer[128];
+				ssize_t numBytesRcvd =
+				    recvfrom(ev->fdrw, udpBuffer, sizeof(udpBuffer) - 1, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
+				if (numBytesRcvd < 0 && errno == EWOULDBLOCK)
+				{
+					ev->readReady = false;
+					break;
+				}
+				udpBuffer[numBytesRcvd] = 0;
+				processCmd(udpBuffer, numBytesRcvd, ev->fdrw, (struct sockaddr *)&clntAddr, clntAddrLen,
+				           serverArguments);
+				advanced = true;
+			}
 
 		int clientCount = Pool_Count(clients);
 		Handle activeClients[clientCount];

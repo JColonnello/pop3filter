@@ -24,6 +24,7 @@ struct ClientData
 	Input requestState;
 	Queue *commandQueue;
 	bool pending;
+	char *user;
 };
 
 typedef enum

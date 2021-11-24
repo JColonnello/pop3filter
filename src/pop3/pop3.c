@@ -43,7 +43,7 @@ bool copyMsg(Input *in, int from, int to, int *count, bool stuff)
 	return result;
 }
 
-ssize_t processPopClient(Input *in, int fd, Queue *queue)
+ssize_t processPopClient(Input *in, int fd, Queue *queue, char **user)
 {
 	ssize_t count = fill(in, fd);
 	char *arg;
@@ -53,6 +53,10 @@ ssize_t processPopClient(Input *in, int fd, Queue *queue)
 	{
 	case POP_INCOMPLETE:
 		break;
+	case POP_USER:
+		*user = malloc(argLen+1);
+		memcpy(*user, arg, argLen);
+		(*user)[argLen] = 0;
 	default: {
 		char *data = malloc(len + 1);
 		memcpy(data, in->tok, len);
