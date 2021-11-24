@@ -41,18 +41,12 @@ ServerArguments parseArguments(int argc, char *argv[])
 
 	int c;
 
-	/// TODO: delete this
-		int fd[2];
-	///
 	while (true)
 	{
 		c = getopt(argc, argv, "hl:L:o:e:t:p:P:u:v");
 		if (c == -1)
 			break;
-		/// TODO: delete this
 
-		char* username = "username";
-		///
 		switch (c)
 		{
 		case 'h':
@@ -64,24 +58,22 @@ ServerArguments parseArguments(int argc, char *argv[])
 			msgLen = set_error_file(&args, optarg, msg);
 			break;
 		case 'l':
-            msgLen = set_proxy_addr(&args, optarg, msg);
+			msgLen = set_proxy_addr(&args, optarg, msg);
 			break;
 		case 'L':
-            msgLen = set_mgmt_addr(&args, optarg, msg);
+			msgLen = set_mgmt_addr(&args, optarg, msg);
 			break;
 		case 't':
 			args.filterCmd = optarg;
-            set_filter(&args, username, fd);
-			// TODO: crear proceso que corra el comando que esta en optarg
 			break;
 		case 'p':
-            msgLen = set_listen_port(&args, optarg, msg);
+			msgLen = set_listen_port(&args, optarg, msg);
 			break;
 		case 'P':
-            msgLen = set_origin_port(&args, optarg, msg);
+			msgLen = set_origin_port(&args, optarg, msg);
 			break;
 		case 'o':
-            msgLen = set_mgmt_port(&args, optarg, msg);
+			msgLen = set_mgmt_port(&args, optarg, msg);
 			break;
 		case 'v':
 			msgLen = get_version(msg);
@@ -89,7 +81,7 @@ ServerArguments parseArguments(int argc, char *argv[])
 			exit(0);
 			break;
 		default:
-            msgLen = get_error(msg);
+			msgLen = get_error(msg);
 			printf(msg);
 			exit(1);
 		}
