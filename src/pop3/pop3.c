@@ -127,7 +127,15 @@ int processPopServer(ClientData *client, int clientfd, bool *redirect)
 	bool completed = parsePopResponse(in, multiline, &success);
 	if (completed)
 	{
-		write(clientfd, in->writeBuf, in->written);
+		if (req.cmd == POP_CAPA)
+		{
+			in->written -= sizeof(".\r\n") - 1;
+			write(clientfd, in->writeBuf, in->written);
+			char str[] = "PIPELINING\r\n.\r\n";
+			write(clientfd, str, sizeof(str) - 1);
+		}
+		else
+			write(clientfd, in->writeBuf, in->written);
 		in->written = 0;
 		Queue_Dequeue(queue, NULL);
 		client->pending = false;
@@ -135,6 +143,7 @@ int processPopServer(ClientData *client, int clientfd, bool *redirect)
 			*redirect = true;
 		else if (req.cmd == POP_QUIT)
 			return -1;
+
 		return 1;
 	}
 	else
