@@ -13,7 +13,7 @@
 void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *clientAddr, socklen_t clientAddrLen,
                 ServerArguments * args)
 {
-	char msg[256];
+	char msg[256] = {'\0'};
 	size_t msgLen;
 	char *errorFile;
 	char *data = NULL;
@@ -87,6 +87,8 @@ void processCmd(const char *buffer, size_t len, int socket, struct sockaddr *cli
 	} 
 	log(LOG_DEBUG, "Counting bytes");
 	addBytes(nbs);
+	memset(msg, '\0', sizeof(msg));
+	msgLen = 0;
 
 }
 /*

@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include "stats.h"
 
 #define MAXPENDING 64 // Maximum outstanding connection requests
 #define MAX_ADDR_BUFFER 128
@@ -124,7 +125,7 @@ int setupUDPServerSocket(char * host, const char *service, int *fd)
 
 int acceptTCPConnection(int servSock)
 {
-
+	addCurrentConnection();
 	struct sockaddr_storage clntAddr; // Client address
 	// Set length of client address structure (in-out parameter)
 	socklen_t clntAddrLen = sizeof(clntAddr);
