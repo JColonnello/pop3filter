@@ -39,7 +39,7 @@ static int setupSocket(struct addrinfo addrCriteria, char * host, const char *se
 			// Se prueba con el siguiente en la lista
 			continue; // Socket creation failed; try next address
 		}
-
+		fcntl(servSock, F_SETFD, FD_CLOEXEC);
 		int opt = 1;
 		if (setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
 		{
@@ -140,7 +140,7 @@ int acceptTCPConnection(int servSock)
 			log(LOG_FATAL, "accept failed");
 	}
 
-	/// TODO: Set nonblocking and buffer sizes
+	// Set nonblocking and buffer sizes
 	int buffer = CLIENT_WRITE_BUF * 2;
 	size_t optSize = sizeof(buffer);
 	fcntl(clntSock, F_SETFL, O_NONBLOCK);

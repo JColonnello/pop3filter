@@ -9,6 +9,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "../logger.h"
+
 #include "../functions.h"
 
 #include <arpa/inet.h>
@@ -39,12 +41,18 @@ ServerArguments parseArguments(int argc, char *argv[])
 
 	int c;
 
+	/// TODO: delete this
+		int fd[2];
+	///
 	while (true)
 	{
 		c = getopt(argc, argv, "hl:L:o:e:t:p:P:u:v");
 		if (c == -1)
 			break;
+		/// TODO: delete this
 
+		char* username = "username";
+		///
 		switch (c)
 		{
 		case 'h':
@@ -62,7 +70,8 @@ ServerArguments parseArguments(int argc, char *argv[])
             msgLen = set_mgmt_addr(&args, optarg, msg);
 			break;
 		case 't':
-            set_filter(&args, optarg, msg);
+			args.filterCmd = optarg;
+            set_filter(&args, username, fd);
 			// TODO: crear proceso que corra el comando que esta en optarg
 			break;
 		case 'p':
@@ -85,6 +94,5 @@ ServerArguments parseArguments(int argc, char *argv[])
 			exit(1);
 		}
 	}
-
 	return args;
 }

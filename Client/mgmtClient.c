@@ -41,12 +41,16 @@ int main (int argc, char * argv[]){
     
     int sockfd;
     struct sockaddr_in servaddr;
+    socklen_t servAddrLen = sizeof(servaddr);
+
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
     {
         perror("Socket creation failed");
         exit(-1);
     }
     memset(&servaddr, 0, sizeof(servaddr));
+
+
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(PORT);
     servaddr.sin_addr.s_addr = INADDR_ANY;
@@ -57,10 +61,10 @@ int main (int argc, char * argv[]){
     memset(ans, '\0', sizeof(message));
     while(fgets(message, sizeof(message), stdin) != NULL)
     {
-        if(sendto(sockfd, message, strlen(message), 0, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0){
+        if(sendto(sockfd, message, strlen(message), 0, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
             printf("ERROR MANDANDO INFO");
         }
-        if(recvfrom(sockfd, ans, sizeof(ans), 0, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0){
+        if(recvfrom(sockfd, ans, sizeof(ans), 0, (struct sockaddr*)&servaddr, &servAddrLen) < 0){
             printf("Error while receiving server's msg\n");
             return -1;
         }
