@@ -1,15 +1,23 @@
 #include "logger.h"
 #include "pop3.h"
-#include <stddef.h>
+#include <stdbool.h>
 #include <string.h>
-
 /*!header:re2c:on*/
 #pragma once
+#include <stddef.h>
+typedef struct
+{
+	char *lim, *cur, *mar, *tok;
+	char *buf, *writeBuf;
+	int state, cond;
+	size_t written, bufSize;
+	/*!stags:re2c format = 'char *@@;\n'; */
+} Input;
+
 #include "pop3/pop3.h"
-#include <stdbool.h>
 bool stuffMail(Input *in);
 bool destuffMail(Input *in);
-bool parsePopResponse(Input *in, bool multiline);
+bool parsePopResponse(Input *in, bool multiline, bool *success);
 PopCommand parsePopRequest(Input *in, char **arg, size_t *argLen, size_t *len);
 /*!header:re2c:off*/
 
@@ -95,7 +103,7 @@ bool stuffMail(Input *in)
 	return result;
 }
 
-bool parsePopResponse(Input *in, bool multiline)
+bool parsePopResponse(Input *in, bool multiline, bool *success)
 {
 	char yych;
 	bool result;
@@ -117,19 +125,21 @@ bool parsePopResponse(Input *in, bool multiline)
         re2c:define:YYSETCONDITION = "in->cond = @@;";
         re2c:define:YYFILL     = "{ return false; }";
 
-        <status> "+OK"          => msg              { COPY; continue; }
-        <status> "-ERR"         => msg              { COPY; continue; }
-        <msg>    [^\r\n]+                           { COPY; continue; }
-        <msg>    [\r\n]                             { COPY; continue; }
-        <msg>    '\r\n'                             { COPY; if(multiline) { in->cond = yycextra; continue; } else { result = true; break; } }
-        <extra> [\r\n]                              { COPY; continue; }
-        <extra> '\r\n.\r\n'                         { COPY; result = true; break; }
-        <extra> [^\r\n]+                            { COPY; continue; }
-        <status,msg,extra> $                        { result = true; break; }
-        <status,msg,extra> *                        { char str[] = "-ERR Invalid response from origin\r\n"; memcpy(&in->writeBuf[in->written], str, sizeof(str) - 1); in->written += sizeof(str) - 1; result = true; break; }
+        <status>            "+OK"       => msg_ok   { COPY; *success = true; continue; }
+        <status>            "-ERR"      => msg_err  { COPY; *success = false; continue; }
+        <msg_ok,msg_err>    [^\r\n]+                { COPY; continue; }
+        <msg_ok,msg_err>    [\r\n]                  { COPY; continue; }
+        <msg_ok>            '\r\n'                  { COPY; if(multiline) { in->cond = yycextra; continue; } else { result = true; break; } }
+        <msg_err>           '\r\n'                  { COPY; result = true; break; }
+        <extra>             [\r\n]                  { COPY; continue; }
+        <extra>             '\r\n.\r\n'             { COPY; result = true; break; }
+        <extra>             [^\r\n]+                { COPY; continue; }
+        <*>                 $                       { result = true; break; }
+        <*>                 *                       { char str[] = "-ERR Invalid response from origin\r\n"; memcpy(&in->writeBuf[in->written], str, sizeof(str) - 1); in->written += sizeof(str) - 1; result = true; break; }
     */
 	}
 
+	*success = in->cond == yycmsg_ok || in->cond == yycextra;
 	in->tok = in->mar = in->cur;
 	in->state = -1;
 	in->cond = yycstatus;
@@ -141,7 +151,7 @@ PopCommand parsePopRequest(Input *in, char **arg, size_t *argLen, size_t *len)
 	char yych;
 	char *args = NULL, *arge = NULL, *end;
 	PopCommand result;
-	/*!stags:re2c format = 'char *@@;\n'; */
+	/*!stags:re2c:request format = '#define @@ in->@@\n'; */
 
 #define YYGETSTATE in->state
 /*!getstate:re2c:request*/
@@ -164,9 +174,18 @@ PopCommand parsePopRequest(Input *in, char **arg, size_t *argLen, size_t *len)
         arg = (print\[ ])+;
 
         'user' [ ]+ @args arg @arge [ ]* '\r\n'         { result = POP_USER; break; }
+        'pass' [ ]+ arg [ ]* '\r\n'                     { result = POP_PASS; break; }
+        'quit' [ ]* '\r\n'                              { result = POP_QUIT; break; }
+        'stat' [ ]* '\r\n'                              { result = POP_STAT; break; }
+        'list' [ ]* '\r\n'                              { result = POP_LIST; break; }
+        'list' [ ]+ arg [ ]* '\r\n'                     { result = POP_LIST_MSG; break; }
         'retr' [ ]+ arg [ ]* '\r\n'                     { result = POP_RETR; break; }
-        print+ '\r\n'                                   { result = POP_UNKNOWN; break; }
+        'dele' [ ]+ arg [ ]* '\r\n'                     { result = POP_DELE; break; }
+        'noop' [ ]* '\r\n'                              { result = POP_NOOP; break; }
+        'rset' [ ]* '\r\n'                              { result = POP_RSET; break; }
+        'capa' [ ]* '\r\n'                              { result = POP_CAPA; break; }
         
+        print+ '\r\n'                                   { result = POP_UNKNOWN; break; }
         '\r\n'                                          { result = POP_INVALID; break; }
         *                                               { result = POP_INVALID; break; }
         $                                               { result = POP_INCOMPLETE; break; }

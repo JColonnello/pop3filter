@@ -89,39 +89,54 @@ ssize_t sendPopRequest(int fd, PendingRequest request)
 	return count;
 }
 
-bool processPopServer(ClientData *client, int clientfd, bool *redirect)
+int processPopServer(ClientData *client, int clientfd, bool *redirect)
 {
 	Input *in = &client->responseState;
 	Queue *queue = client->commandQueue;
 	PendingRequest req;
 	bool multiline = false;
 	if (!Queue_Peek(queue, &req))
-		return false;
+		return 0;
 	switch (req.cmd)
 	{
 	case POP_INVALID: {
 		char msg[] = "-ERR Invalid command\r\n";
 		write(clientfd, msg, sizeof(msg));
 		Queue_Dequeue(queue, NULL);
-		return true;
+		return 1;
 	}
+	case POP_LIST:
+	case POP_CAPA:
+		multiline = true;
+		break;
+	case POP_LIST_MSG:
 	case POP_RETR:
-		*redirect = true;
 	case POP_UNKNOWN:
 	case POP_INCOMPLETE:
+	case POP_PASS:
+	case POP_QUIT:
+	case POP_STAT:
+	case POP_DELE:
+	case POP_NOOP:
+	case POP_RSET:
 	case POP_USER:
 		multiline = false;
 		break;
 	}
-	bool completed = parsePopResponse(in, multiline);
+	bool success = false;
+	bool completed = parsePopResponse(in, multiline, &success);
 	if (completed)
 	{
 		write(clientfd, in->writeBuf, in->written);
 		in->written = 0;
 		Queue_Dequeue(queue, NULL);
 		client->pending = false;
-		return true;
+		if (req.cmd == POP_RETR && success)
+			*redirect = true;
+		else if (req.cmd == POP_QUIT)
+			return -1;
+		return 1;
 	}
 	else
-		return false;
+		return 0;
 }

@@ -151,34 +151,32 @@ static void closeClient(ClientData *client, CommSegment level)
 	EventData *filterEvent = Pool_GetRef(evDataPool, client->filterEvent);
 
 	level &= client->activeSegments;
-	if (hasFlag(level, CS_CLIENT_OUT) && hasFlag(client->activeSegments, CS_CLIENT_OUT))
+	if (hasFlag(level, CS_CLIENT_OUT))
 	{
 		clientEvent->readReady = false;
 		shutdown(clientEvent->fdrw, SHUT_RD);
 	}
-	if (hasFlag(level, CS_SERVER_IN) && hasFlag(client->activeSegments, CS_SERVER_IN))
+	if (hasFlag(level, CS_SERVER_IN))
 	{
 		serverEvent->writeReady = false;
 		shutdown(serverEvent->fdrw, SHUT_WR);
 	}
-	if (hasFlag(level, CS_CLIENT_IN) && hasFlag(client->activeSegments, CS_CLIENT_IN))
+	if (hasFlag(level, CS_CLIENT_IN))
 	{
-		closeClient(client, CS_CLIENT_OUT | CS_SERVER | CS_FILTER);
 		clientEvent->writeReady = false;
-		shutdown(serverEvent->fdrw, SHUT_WR);
+		shutdown(clientEvent->fdrw, SHUT_WR);
 	}
-	if (hasFlag(level, CS_SERVER_OUT) && hasFlag(client->activeSegments, CS_SERVER_OUT))
+	if (hasFlag(level, CS_SERVER_OUT))
 	{
-		closeClient(client, CS_SERVER_IN);
 		serverEvent->readReady = false;
 		shutdown(serverEvent->fdrw, SHUT_RD);
 	}
-	if (hasFlag(level, CS_FILTER_IN) && hasFlag(client->activeSegments, CS_FILTER_IN))
+	if (hasFlag(level, CS_FILTER_IN))
 	{
 		close(filterEvent->fdw);
 		filterEvent->writeReady = false;
 	}
-	if (hasFlag(level, CS_FILTER_OUT) && hasFlag(client->activeSegments, CS_FILTER_OUT))
+	if (hasFlag(level, CS_FILTER_OUT))
 	{
 		close(filterEvent->fdrw);
 		filterEvent->readReady = false;
@@ -202,6 +200,18 @@ static void closeClient(ClientData *client, CommSegment level)
 	{
 		Pool_Remove(evDataPool, client->filterEvent);
 		client->filterEvent = -1;
+	}
+
+	if (hasFlag(level, CS_CLIENT_IN))
+	{
+		closeClient(client, CS_CLIENT_OUT | CS_SERVER | CS_FILTER);
+		return;
+	}
+
+	if (hasFlag(level, CS_SERVER_OUT))
+	{
+		closeClient(client, CS_SERVER_IN);
+		return;
 	}
 
 	// Free client structures
@@ -276,7 +286,12 @@ static bool processClient(ClientData *client)
 		advanced = true;
 		bool redirect = false;
 		ssize_t count = fillBuffer(&client->responseState, serverEvent->fdrw);
-		bool completed = processPopServer(client, clientEvent->fdrw, &redirect);
+		int completed = processPopServer(client, clientEvent->fdrw, &redirect);
+		if (completed < 0)
+		{
+			closeClient(client, CS_CLIENT | CS_SERVER);
+			return true;
+		}
 		if (checkEOF(count) && !completed)
 		{
 			closeClient(client, CS_SERVER_OUT);

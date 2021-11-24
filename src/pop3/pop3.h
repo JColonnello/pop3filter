@@ -5,21 +5,23 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-typedef struct
-{
-	char *lim, *cur, *mar, *tok;
-	char *buf, *writeBuf;
-	int state, cond;
-	size_t written, bufSize;
-} Input;
-
 typedef enum
 {
 	POP_INVALID,
 	POP_INCOMPLETE,
 	POP_UNKNOWN,
+
 	POP_USER,
+	POP_PASS,
+	POP_QUIT,
+	POP_STAT,
+	POP_LIST,
+	POP_LIST_MSG,
 	POP_RETR,
+	POP_DELE,
+	POP_NOOP,
+	POP_RSET,
+	POP_CAPA,
 } PopCommand;
 
 typedef struct
@@ -29,11 +31,12 @@ typedef struct
 	size_t len;
 } PendingRequest;
 
-#include <server.h>
+#include "../parsers/pop3.h"
+#include "server.h"
 
 bool copyMsg(Input *in, int to, bool stuff);
 bool processPopClient(Input *in, int fd, Queue *queue, char **user);
 ssize_t sendPopRequest(int fd, PendingRequest request);
-bool processPopServer(ClientData *client, int clientfd, bool *redirect);
+int processPopServer(ClientData *client, int clientfd, bool *redirect);
 void initState(Input *in);
 ssize_t fillBuffer(Input *in, int fd);
