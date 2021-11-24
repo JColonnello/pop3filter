@@ -25,8 +25,13 @@ ServerArguments parseArguments(int argc, char *argv[])
 {
 	ServerArguments args;
 	char msg[1024];
-	size_t msgLen;
 	memset(&args, 0, sizeof(ServerArguments)); // sobre todo para setear en null los punteros de users
+
+	if (argc <= 1)
+	{
+		fprintf(stderr, "Insuficientes argumentos\n");
+		exit(1);
+	}
 
 	/*      VALORES POR DEFECTO     */
 	set_error_file(&args, "/dev/null", msg);
@@ -36,7 +41,7 @@ ServerArguments parseArguments(int argc, char *argv[])
 	set_origin_port(&args, DEFAULT_ORIGIN_PORT, msg);
 
 	args.originServer = ""; // TODO: de donde lo tomo?
-	args.filterCmd = "";
+	args.filterCmd = NULL;
 	/********************************/
 
 	int c;
@@ -50,41 +55,42 @@ ServerArguments parseArguments(int argc, char *argv[])
 		switch (c)
 		{
 		case 'h':
-			msgLen = get_help(msg);
-			printf(msg);
+			get_help(msg);
+			printf("%s", msg);
 			exit(0);
 			break;
 		case 'e':
-			msgLen = set_error_file(&args, optarg, msg);
+			set_error_file(&args, optarg, msg);
 			break;
 		case 'l':
-			msgLen = set_proxy_addr(&args, optarg, msg);
+			set_proxy_addr(&args, optarg, msg);
 			break;
 		case 'L':
-			msgLen = set_mgmt_addr(&args, optarg, msg);
+			set_mgmt_addr(&args, optarg, msg);
 			break;
 		case 't':
 			args.filterCmd = optarg;
 			break;
 		case 'p':
-			msgLen = set_listen_port(&args, optarg, msg);
+			set_listen_port(&args, optarg, msg);
 			break;
 		case 'P':
-			msgLen = set_origin_port(&args, optarg, msg);
+			set_origin_port(&args, optarg, msg);
 			break;
 		case 'o':
-			msgLen = set_mgmt_port(&args, optarg, msg);
+			set_mgmt_port(&args, optarg, msg);
 			break;
 		case 'v':
-			msgLen = get_version(msg);
-			printf(msg);
+			get_version(msg);
+			printf("%s", msg);
 			exit(0);
 			break;
 		default:
-			msgLen = get_error(msg);
-			printf(msg);
+			get_error(msg);
+			printf("%s", msg);
 			exit(1);
 		}
 	}
+	set_origin_addr(&args, argv[argc - 1], msg);
 	return args;
 }

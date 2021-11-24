@@ -7,17 +7,15 @@
 typedef struct
 {
 	char *logFile;
-	char * mgmtAddr;
-	char * mgmtPort;
-	char * listenAddr;
-	char * listenPort;
+	char *mgmtAddr;
+	char *mgmtPort;
+	char *listenAddr;
+	char *listenPort;
 	int dns_timer;
-	char *originAddr;
 	char *originPort;
 	char *filterCmd;
 	char *originServer;
 } ServerArguments;
-
 
 /**
  * Interpreta la linea de comandos (argc, argv) llenando

@@ -304,7 +304,10 @@ static bool processClient(ClientData *client)
 		if (redirect && completed)
 		{
 			int fd[2];
-			pipe2(fd, O_NONBLOCK);
+
+			if (serverArguments.filterCmd == NULL || set_filter(&serverArguments, client->user, fd) < 0)
+				pipe2(fd, O_CLOEXEC | O_NONBLOCK);
+
 			Handle handle = eventAdd(
 			    (EventData){
 			        .clientId = client->id,
@@ -421,16 +424,15 @@ void setup_args(int argc, char *argv[])
 	serverArguments = parseArguments(argc, argv);
 
 	char msg[1024];
-	size_t msgLen;
-	msgLen = get_proxy_addr(&serverArguments, msg);
+	get_proxy_addr(&serverArguments, msg);
 	log(LOG_DEBUG, "%s", msg);
-	msgLen = get_mgmt_addr(&serverArguments, msg);
+	get_mgmt_addr(&serverArguments, msg);
 	log(LOG_DEBUG, "%s", msg);
-	msgLen = get_listen_port(&serverArguments, msg);
+	get_listen_port(&serverArguments, msg);
 	log(LOG_DEBUG, "%s", msg);
-	msgLen = get_origin_port(&serverArguments, msg);
+	get_origin_port(&serverArguments, msg);
 	log(LOG_DEBUG, "%s", msg);
-	msgLen = get_mgmt_port(&serverArguments, msg);
+	get_mgmt_port(&serverArguments, msg);
 	log(LOG_DEBUG, "%s", msg);
 }
 
@@ -502,7 +504,7 @@ void startServer()
 	    },
 	    EPOLLIN);
 
-	if (resolve_dns("localhost", "2110", 0))			//TODO: de donde sale ese 2110?
+	if (resolve_dns(serverArguments.originServer, serverArguments.originPort, 0)) //TODO: de donde sale ese 2110?
 		log(LOG_FATAL, "Could not resolve hostname");
 }
 
@@ -580,7 +582,7 @@ void processingLoop()
 				static char udpBuffer[128];
 				ssize_t numBytesRcvd =
 				    recvfrom(ev->fdrw, udpBuffer, sizeof(udpBuffer) - 1, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
-				if (numBytesRcvd < 0 && errno == EWOULDBLOCK)
+				if (numBytesRcvd < 0)
 				{
 					ev->readReady = false;
 					break;
