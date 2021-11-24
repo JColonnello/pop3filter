@@ -21,12 +21,6 @@ make clean
 make all
 ````
 
-Para el cliente posicionarse en la carpeta "Client" y compilar con el siguiente comando:
-
-```bash
-gcc mgmtClient.c -o client
-````
-
 ## Ejecución
 
 La ejecución se realiza con el siguiente comando:
@@ -34,7 +28,7 @@ La ejecución se realiza con el siguiente comando:
 ```bash
 ./build/pop3filter 
 ```
-Para el client desde la carpeta "Client":
+Para el client desde la carpeta "Client". Escribir los comandos directamente:
 ```bash
-./client
+./build/client
 ```
